@@ -137,6 +137,9 @@
         query = sanatize(query);
         fields = JSON.parse(request.query.fields);
 
+        console.log(fields);
+	console.log(JSON.stringify(fields), sanatize(fields));
+
         //Start up connection and run the query
         MongoClient.connect(url, function (err, db) {
             assert.equal(null, err);

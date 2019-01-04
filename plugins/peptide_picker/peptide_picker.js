@@ -3,7 +3,7 @@
  * Copyright 2017 Tim Kennell Jr.
  * Licensed under the MIT License (http://opensource.org/licenses/MIT)
  **
- * Display Microarray Data in visible format for comparison of samples, 
+ * Display Microarray Data in visible format for comparison of samples,
  *     peptides, cycles, and exposures
  */
 
@@ -292,7 +292,7 @@
          * ============================================================== */
 
         main.div = pageStructure.container;
-        
+
         /**
          * Create a new state function based on users input and forcibly fire the state
          * @param Function customStateFunction The new state function to fire on state change
@@ -368,11 +368,11 @@
         // expecting level 1.0.1 data for now
         var displaySamples = function(data) {
             var $peptidePickerTitle = $('<h2 class="page-header">Peptide Picker</h2>').appendTo(pageStructure.peptidePickerCol),
-                
+
                 $sampleRow = $('<div class="row"></div>').appendTo(pageStructure.peptidePickerCol),
                 $sampleCol = $('<div class="col-sm-6"></div>').appendTo($sampleRow),
                 $searchCol = $('<div class="col-sm-6 bottom-column"></div>').appendTo($sampleRow),
-                
+
                 $sampleDropdownLabel = $('<label for="sample-dropdown">Sample: </label>').appendTo($sampleCol),
                 $sampleDropdown = $('<select id="sample-dropdown" class="form-control"></select>').appendTo($sampleCol),
 
@@ -385,7 +385,7 @@
             for (var i = 0; i < data.length; i++) {
                 if (state && typeof state === 'object' && state.sample === data[i].name) {
                     $sampleDropdown.append('<option selected value=' + i + '>' + data[i].name + '</option>');
-                
+
                 } else {
                     $sampleDropdown.append('<option value=' + i + '>' + data[i].name + '</option>');
                 }
@@ -409,7 +409,7 @@
 
                 if (! peptideString.match(searchPattern)) {
                     peptideList[i].changeSpotOpacity(0.1);
-                
+
                 } else {
                     peptideList[i].changeSpotOpacity(1);
                 }
@@ -499,7 +499,7 @@
 
             // visible
             peptideRowWidth = pageStructure.peptideMatrixDummy.width();
-            
+
             var $peptideDisplayRow,
                 $cell,
                 spotOpacity = 1,
@@ -561,7 +561,7 @@
 
         /**
          * Updates the peptide matrix display
-         * Can be attached to events to allow display update 
+         * Can be attached to events to allow display update
          */
         var updatePeptides = function(peptideList, displayDiv) {
             pageStructure.peptideMatrix.empty();
@@ -611,7 +611,6 @@
             } else {
                 displayPeptideData(peptide);
 
-                
                 previousCellColor = peptide.cell.css("background-color");
                 peptide.changeCellColor('#6c6c93');
             }
@@ -809,7 +808,7 @@
 
         /**
          * Creates the bootstrap row for the cycle and exposure sliders and then loads the sliders in
-         * @param 
+         * @param
          */
         var createCycleExposureHtmlScaffold = function(sample) {
             pageStructure.cycleExposureRow.empty();
@@ -884,7 +883,6 @@
 
             if (quadfecta !== undefined && quadfecta.image !== undefined) {
                 return baseImgUrl + encodeURIComponent('"' + quadfecta.image +'"');
-            
             } else {
                 return undefined;
             }
@@ -926,7 +924,7 @@
 
             if (imageLink !== undefined && quadfecta.image !== undefined) {
                 $tableTitle = $('<h3 style="display: inline; vertical-align: middle">Data</h3>&nbsp;&nbsp;&nbsp;&nbsp;<p style="display: inline;">(Image: <a href="' + imageLink + '" target="_blank">' + quadfecta.image + '</a>)</p>');
-            
+
             } else {
                 $tableTitle = $('<h3 style="display: inline; vertical-align: middle">Data</h3>');
             }

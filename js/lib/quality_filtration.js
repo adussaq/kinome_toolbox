@@ -448,8 +448,10 @@
             kineticPromise.then(function (final_data) {
                 final_data = final_data.map(shiftToMin);
                 resolve(final_data);
+                filter_object = {};
             }).catch(function (err) {
                 reject(err);
+                filter_object = {};
             });
 
         });

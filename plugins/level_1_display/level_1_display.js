@@ -146,6 +146,8 @@
             $toolTip.append('<div style="padding-bottom: 0; margin-bottom: 0"><strong>Sample</strong>: ' + dataPoint.name + '</div>');
             $toolTip.append('<div style="padding-bottom: 0; margin-bottom: 0"><strong>Peptide</strong>: ' + dataPoint.peptide + '</div>');
 
+            //console.log(dataPoint, dataPoint.image);
+
             if (dataPoint.image !== undefined) {
                 $toolTip.append('<div style="padding-bottom: 0; margin-bottom: 0"><strong>Image</strong>: <a href="' + baseImgUrl + encodeURIComponent('"' + dataPoint.image + '"') + '" target="_blank">' + dataPoint.image + '</a></div>');
             }

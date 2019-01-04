@@ -82,7 +82,7 @@
             get_image = function (ind, data) {
                 var i;
                 for (i = 0; i < data.run_data.length; i += 1) {
-                    if (data.run_data[i].key.match(/image/i)) {
+                    if (data.run_data[i].key.match(/^image$/i)) {
                         return data.run_data[i].value[ind];
                     }
                 }
@@ -608,13 +608,12 @@
 
             eval_equation = function (obj) {
                 var nl_equation = {};
-                if (!obj.kinetic.equation && obj.kinetic.equation_string) {
-                    eval('nl_equation = ' + obj.kinetic.equation_string);
-                    obj.kinetic.equation = nl_equation;
-                }
+
+                eval('nl_equation = ' + obj.kinetic.equation_string);
+                obj.kinetic.equation = nl_equation;
 
                 //define the linear function one
-                obj.linear.equation = obj.linear.equation || {
+                obj.linear.equation = {
                     description: "For fitting linear data",
                     displayEq: function (params) {
                         return 'y(e)=' + params[0].toFixed(2) + '·e+' + params[1].toFixed(2);

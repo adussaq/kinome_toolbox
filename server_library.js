@@ -1,21 +1,9 @@
 (function () {
     'use strict';
 
-    var MongoClient = require('mongodb').MongoClient, restify = require('restify'), assert = require('assert');//, ObjectId = require('mongodb').ObjectID;
+    var ID = "_id", lib = {}, MongoClient = require('mongodb').MongoClient, assert = require('assert');
 
-    //Needs to impliment aggregate stuff (https://docs.mongodb.com/manual/reference/operator/aggregation/)
-    //Need to impliment mapreduce stuff
-    //Need to impliment projection stuff
-
-    /*the following is for the internal db (accesible as a registered UAB user only)*/
-
-
-    //Good source for operators:
-    // https://docs.mongodb.com/manual/reference/operator/
-    //I am making sure to not allow any operators that can change the documents
-    // this is to ensure that this remains a query only server
-
-    var acceptedRegex = "", sanatize, j, grabDbName, grabDocument,
+    var acceptedRegex = "", sanatize, j, grabDbName, grabDocument, respond, list,
             accepted$ = [
         "all", "and", "bitsAllClear", "bitsAllSet", "bitsAnyClear",
         "bitsAnySet", "collStats", "comment", "elemMatch",
@@ -36,7 +24,7 @@
 
     //define the query sanatize function
     //sanatize the query
-    sanatize = function (query) {
+    sanatize = function (query, ver) {
         var keys, i;
         if (typeof query === "object") {
             keys = Object.keys(query);
@@ -58,12 +46,12 @@
         return query;
     };
 
-    grabDbName = function (request, response) {
+    grabDbName = function (request, response, ver) {
         var myDbName = request.params.db_name, query, fields, sort,
                 collectionName = request.params.collection_name, url;
 
         //Deal with the objects
-        // myDbName = myDbName || 'kinome';
+        myDbName = 'kinome';
         url = 'mongodb://localhost:27017/' + myDbName;
         console.log('db name:', myDbName);
         request.query.find = request.query.find || "{}";
@@ -115,21 +103,18 @@
 
             //run the sort operation and then return the final result
             spec.sort(sort).toArray(function (err, docs) {
-                assert.equal(err, null);
-                console.log('Found docs');
-               // console.log("Found the following records", docs);
-                response.send(docs);
+                respond[ver](response, docs, err);
             });
         });
     };
 
-    grabDocument = function (request, response) {
+    grabDocument = function (request, response, ver) {
         var myDbName = request.params.db_name, fields,
                 collectionName = request.params.collection_name,
                 query = {id: decodeURIComponent(request.params.doc_id)}, url;
 
         //Deal with the objects
-        // myDbName = myDbName || 'kinome';
+        myDbName = 'kinome';
         url = 'mongodb://localhost:27017/' + myDbName;
         request.query.fields = request.query.fields || "-1";
         request.query.fields = decodeURIComponent(request.query.fields);
@@ -138,6 +123,7 @@
         query = sanatize(query);
         fields = JSON.parse(request.query.fields);
 
+        console.log(fields);
         //Start up connection and run the query
         MongoClient.connect(url, function (err, db) {
             assert.equal(null, err);
@@ -162,64 +148,93 @@
 
             //run the sort operation and then return the final result
             spec.toArray(function (err, docs) {
-                assert.equal(err, null);
-                console.log('Found docs');
-                //console.log("Found the following records", docs);
-                //Only return the first object
-                if (docs[0]) {
-                    response.send(docs[0]);
-                } else {
-                    response.send(undefined);
-                }
+                respond[ver](response, docs[0], err);
             });
         });
     };
 
-    //sets up the server stuff
-    var server1 = restify.createServer({
-        accept: ['application/json', 'image/tif', 'image/png', 'text/plain']
-    });
-    server1.use(restify.queryParser());
-    server1.use(restify.CORS({}));
+    list = function (request, response, ver) {
+        var myDbName, url, query, fields,
+                collectionName = request.params.collection_name;
+        //Deal with the objects
+        myDbName = 'kinome';
+        url = 'mongodb://localhost:27017/' + myDbName;
 
-    server1.get(/\/img\/kinome\/?.*/, restify.serveStatic({
-        directory: "/var/www"
-    }));
-    server1.get(/\/file\/?.*/, restify.serveStatic({
-        directory: "/var/www/global_files"
-    }));
+        //Objectify them
+        query = {};
+        fields = {"_id": 1};
 
-    server1.get(/\/uabfile\/?.*/, restify.serveStatic({
-        directory: "/var/www/internal_files"
-    }));
+        //Start up connection and run the query
+        MongoClient.connect(url, function (err, db) {
+            assert.equal(null, err);
+            var spec;
+            var collection = db.collection(collectionName);
 
-    //http://138.26.31.155:8000/img/kinome/631308613_W1_F1_T200_P154_I1313_A30.tif
+            //options
+            var limit = 9000000; //9 mil more than enough
+            var skip = 0;
+            var maxTimeMS = 1000 * 60 * 60; //1 hr
 
-    /*the following is for the internal db (accesible as a registered UAB user only)*/
-    server1.get("/db/:db_name/:collection_name", grabDbName);
-    server1.get("/db/:db_name/:collection_name/:doc_id", grabDocument);
-    server1.listen(8000, function () {
-        console.log('%s listening at %s', server1.name, server1.url);
-    });
+            spec = collection.find(query, fields, {
+                limit: limit,
+                skip: skip,
+                maxTimeMS: maxTimeMS
+            });
 
+            //run the sort operation and then return the final result
+            spec.toArray(function (err, docs) {
+                if (Array.isArray(docs)) {
+                    docs = docs.map(function (doc) {
+                        return "http://db.kinomecore.com/2.0.0/" + collectionName + "/" + doc[ID];
+                    });
+                }
+                respond[ver](response, docs, err);
+            });
+        });
+    };
 
-    // var server2 = restify.createServer({
-    //     accept: ['application/json', 'image/tif', 'image/png']
-    // });
-    // server2.use(restify.queryParser());
-    // server2.use(restify.CORS({}));
+    //Respond functions (internal only)
+    respond = {};
+    respond["1.0.0"] = function (response, data, error) {
+        if (error) {
+            assert.equal(error, null);
+        } else {
+            response.send(data);
+        }
+    };
+    respond["2.0.0"] = function (response, data, error) {
+        if (error) {
+            response.send({error: true, message: error});
+        } else {
+            if (!Array.isArray(data)) {
+                data = [data];
+            }
+            response.send({error: false, message: null, data: data});
+        }
+    };
 
-    // server2.get(/\/img\/kinome\/?.*/, restify.serveStatic({
-    //     directory: "./server_imgs"
-    // }));
+    lib = {
+        "1.0.0": {
+            grabDbName: function (request, response) {
+                return grabDbName(request, response, "1.0.0");
+            },
+            grabDocument: function (request, response) {
+                return grabDocument(request, response, "1.0.0");
+            }
+        },
+        "2.0.0": {
+            grabDbName: function (request, response) {
+                return grabDbName(request, response, "2.0.0");
+            },
+            grabDocument: function (request, response) {
+                return grabDocument(request, response, "2.0.0");
+            },
+            list: function (request, response) {
+                return list(request, response, "2.0.0");
+            }
+        }
+    };
 
-
-
-    // /*The following is for the external db*/
-    // server2.get("/1.0.0/:collection_name", grabDbName);
-    // server2.get("/1.0.0/:collection_name/:doc_id", grabDocument);
-    // server2.listen(8080, function () {
-    //     console.log('%s listening at %s', server2.name, server2.url);
-    // });
+    module.exports = lib;
 
 }());

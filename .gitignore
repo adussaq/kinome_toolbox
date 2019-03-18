@@ -2,3 +2,5 @@
 /data_examples/
 /temp/
 koala-config.json
+saml_auth.js
+/keys/

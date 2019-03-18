@@ -7,7 +7,6 @@
 
     // Set up auth
     var idp_xml_file = "./keys/uab-shib-metadata.xml";
-    //var service_provider_xml_file = "./keys/service_provider.xml";
     // var idp_xml_file = "./keys/sample_idp.xml";
     var service_provider_xml_file = "./keys/sample_sp.xml";
     var service_provider_xml_file_read = fs.readFileSync(service_provider_xml_file, 'utf8');
@@ -43,7 +42,8 @@
                 res.send({id: results.extract.nameID, response: results.extract.response});
             })
             .catch(function (err) {
-                console.log(bodyObj, "\n\n\n*****\n\n\n", err);
+                console.log(bodyObj);
+                console.log(err);
                 res.send(["error", err.message]);
             });
 

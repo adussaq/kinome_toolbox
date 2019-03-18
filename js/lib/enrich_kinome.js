@@ -496,6 +496,7 @@
                                 background: that[types[i]].background[fit_ind][pep_ind],
                                 spot_row: peptide_object[peps[k]].row * 1,
                                 spot_col: peptide_object[peps[k]].col * 1,
+                                equation: that[types[i]].equation,
                                 set: set_function(types[i], fit_ind, pep_ind, that),
                                 more: more_function(fit_ind, peptide_object[peps[k]])
                             };

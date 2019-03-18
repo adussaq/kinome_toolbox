@@ -60,7 +60,7 @@ as urls this works by assuming jQuery is present and that Promises exist
 
         //other
         'bs_toggle-js': './js/client/general/bootstrap-toggle.min.js',
-        'bs_toggle-css': 'https://gitcdn.github.io/bootstrap-toggle/2.2.2/css/bootstrap-toggle.min.css',
+        'bs_toggle-css': './css/bootstrap-toggle.min.css',
         d3: './js/client/general/d3.min.js',
         'bs_slider-js': './js/client/general/bootstrap-slider.min.js',
         'bs_slider-css': 'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-slider/9.8.0/css/bootstrap-slider.min.css',

@@ -5,7 +5,8 @@
         return (1 / (1 / (P[0] * (xVector[0] - P[1])) + 1 / P[2]));
     },
     setInitial: function (x_vector, y_values) {
-        var vi, Ym, c, yMax, x_inv = [], y_inv = [], ysum = 0, xsum = 0, x2sum = 0, y2sum = 0, xysum = 0, n;
+        'use strict';
+        var i, vi, Ym, c, yMax, x_inv = [], y_inv = [], ysum = 0, xsum = 0, x2sum = 0, y2sum = 0, xysum = 0, n;
 
         yMax = Math.max.apply(null, y_values);
 

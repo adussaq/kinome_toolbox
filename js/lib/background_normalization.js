@@ -303,7 +303,9 @@
         minCycle = data.list('cycles').reduce(getMin);
         for (i = 0; i < exposures.length; i += 1) {
             points = data.get({
-                cycle: minCycle,
+                //cycle: minCycle, 
+                // Doing the above breaks if the first value is in error and
+                // high, we do need to remove the post wash
                 exposure: exposures[i]
             });
             if (points.length > 1) {

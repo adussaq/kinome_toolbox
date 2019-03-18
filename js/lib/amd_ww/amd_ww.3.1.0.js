@@ -15,6 +15,10 @@
     //check for node
     if ("undefined" !== typeof module && module.exports) {
         WORKER = require('webworker-threads').Worker;
+        //There is a experimental worker threads in 10,
+            //but it does not work the same way.
+        //WORKER = require('worker_threads');
+        //WORKER = WORKER.Worker;
     } else if (window.Worker) {
         WORKER = window.Worker;
     } else {
@@ -60,7 +64,7 @@
             start_obj.num_workers *= 1;
 
             //Check Variable definitions
-            if (isNaN(start_obj.num_workers) || typeof start_obj.num_workers !== 'number') {
+            if (Number.isNaN(start_obj.num_workers) || typeof start_obj.num_workers !== 'number') {
                 throw 'num_workers must be an integer';
             }
             //This is the first check for a filename, the worker will do the second check

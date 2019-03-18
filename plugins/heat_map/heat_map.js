@@ -23,50 +23,42 @@
             require('img-picker'),
             require('gradient'),
             require('hcluster'),
-            require('d3')
+            require('d3'),
+            require('equation-picker'),
+            require('bs_slider-js')
         ];
 
+    var calculateValues, waitForFinalEvent;
+
     require("bs_toggle-css", 'style');
+    require('bs_slider-css');
+
+    waitForFinalEvent = (function () {
+        var timers = {};
+        return function (callback, ms, uniqueId) {
+            if (!uniqueId) {
+                uniqueId = "Don't call this twice without a uniqueId";
+            }
+
+            if (timers[uniqueId]) {
+                clearTimeout(timers[uniqueId]);
+            }
+            timers[uniqueId] = setTimeout(callback, ms);
+        };
+    }());
 
     buildFigures = function ($div, DATA) {
-        var build_columns,
-            $page_obj = {},
-            equation,
-            minimums = {
-                linear: {},
-                kinetic: {}
-            },
-            retSignal,
-            retBack,
-            getOneDataSet,
+        var $page_obj = {},
             my_state_obj = {},
-            retSigDBack,
-            retSigMBack,
-            pep_picked,
             thisState,
-            limits = {
-                linear: {},
-                kinetic: {}
-            },
-            currentEQnum = {
-                linear: 2,
-                kinetic: 2
-            },
-            makeOneChart,
-            uppercase,
+            eqPicker,
+            pep_picked,
             imgPicker;
 
         $page_obj.div = $div;
         //defaults
-        my_state_obj.linear = {
-            param: 0,
-            params: DATA[0].linear.equation.mathParams
-        };
-        my_state_obj.kinetic = {
-            param: 0,
-            //I have to assume for this that this is consistent across data presented.
-            params: DATA[0].kinetic.equation.mathParams
-        };
+        my_state_obj.filter = "none";
+        my_state_obj.filterVal = -1;
 
         $page_obj.width = $('<div>', {class: 'col col-sm-6 col-xs-12'});
         $page_obj.width.appendTo($('<div>', {class: 'row'})
@@ -74,107 +66,46 @@
                 .appendTo('body')));
 
 
-        retSignal = function (object, type) {
-            if (!object) {
-                return NaN;
-            }
-            return object.signal.parameters[my_state_obj[type].param];
-        };
-        retBack = function (object, type) {
-            if (!object) {
-                return NaN;
-            }
-            return object.background.parameters[my_state_obj[type].param];
-        };
-        retSigDBack = function (object, type) {
-            if (!object) {
-                return NaN;
-            }
-            return Math.log(object.signal.parameters[my_state_obj[type].param] /
-                    object.background.parameters[my_state_obj[type].param]) / Math.log(2);
-        };
-        retSigMBack = function (object, type) {
-            if (!object) {
-                return NaN;
-            }
-            //this is the hard one...
-            var all, i, key2, get_obj, min, allVals = [];
-            if (type === 'kinetic') {
-                key2 = object.exposure;
-                get_obj = {type: type, exposure: object.exposure};
-            } else {
-                key2 = object.cycle;
-                get_obj = {type: type, cycle: object.cycle};
-            }
-            minimums[type][my_state_obj[type].param] = minimums[type][my_state_obj[type].param] || {};
-            if (minimums[type][my_state_obj[type].param][key2] !== undefined) {
-                min = minimums[type][my_state_obj[type].param][key2];
-            } else {
-                all = DATA.get(get_obj);
-                // console.log(all);
-                for (i = 0; i < all.length; i += 1) {
-                    allVals.push(all[i].signal.parameters[my_state_obj[type].param] - all[i].background.parameters[my_state_obj[type].param]);
-                }
-                allVals = allVals.sort(function (a, b) {
-                    return a - b;
-                });
-                min = allVals[Math.floor(allVals.length / 20) - 1];
-                minimums[type][my_state_obj[type].param][key2] = min;
-                // console.log(all, get_obj, min);
-            }
-            if (object.signal.parameters[my_state_obj[type].param] - object.background.parameters[my_state_obj[type].param] < min) {
-                return 0;
-            } else {
-                return Math.log(object.signal.parameters[my_state_obj[type].param] - object.background.parameters[my_state_obj[type].param] - (min) + 1) / Math.log(2);
-            }
-        };
-        //initialize
-        equation = {kinetic: retSigDBack, linear: retSigDBack};
-
-        uppercase = function (str) {
-            return str.charAt(0).toUpperCase() + str.slice(1);
-        };
-
         //peptide picker response
         pep_picked = function (state_object) {
             thisState = state_object;
 
-            // console.log(state_object);
+            //wait for event end so page does not redraw more than needed.
+            waitForFinalEvent(function () {
+                var linearValues,
+                    kineticValues,
+                    linearHeatMapValues,
+                    kineticHeatMapValues;
 
-            var linearValues,
-                kineticValues,
-                linearHeatMapValues,
-                kineticHeatMapValues,
-                linearHeatMap,
-                kineticHeatMap;
+                if ($page_obj && $page_obj.heatMaps) {
+                    $page_obj.linearHeatMap.empty();
+                    $page_obj.kineticHeatMap.empty();
+                    $page_obj.filterBar.empty();
+                }
 
-            if ($page_obj && $page_obj.heatMaps) {
-                $page_obj.linearHeatMap.empty();
-                $page_obj.kineticHeatMap.empty();
-            }
+                buildSlider(DATA, my_state_obj, state_object, $page_obj.filterBar, pep_picked);
 
-            // get initial values
-            linearValues = calculateValues(DATA, equation, 'linear', state_object);
-            kineticValues = calculateValues(DATA, equation, 'kinetic', state_object);
+                // get initial values
+                linearValues = calculateValues(DATA, state_object.eq.linear.eval, 'linear', state_object, my_state_obj.filter, my_state_obj.filterVal);
+                kineticValues = calculateValues(DATA, state_object.eq.kinetic.eval, 'kinetic', state_object, my_state_obj.filter, my_state_obj.filterVal);
 
-            linearHeatMapValues = normalizeValues(straightenItValue(clusterSamples(linearValues)));
-            kineticHeatMapValues = normalizeValues(straightenItValue(clusterSamples(kineticValues)));
+                linearHeatMapValues = normalizeValues(straightenItValue(clusterSamples(linearValues)));
+                kineticHeatMapValues = normalizeValues(straightenItValue(clusterSamples(kineticValues)));
 
-            // console.log(linearValues, kineticValues);
-            // console.log('pep picked');
+                // console.log(linearValues, kineticValues);
+                // console.log('pep picked');
 
-            if ($page_obj.dummyHeatMap !== undefined) {
-                // console.log(DATA);
-                $('<h3>Linear Heat Map</h3>').appendTo($page_obj.linearHeatMap);
-                createTree(linearHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.linearHeatMap);
-                createHeatMap(linearHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.linearHeatMap);
+                if ($page_obj.dummyHeatMap !== undefined) {
+                    // console.log(DATA);
+                    $('<h3>Linear Heat Map</h3>').appendTo($page_obj.linearHeatMap);
+                    createTree(linearHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.linearHeatMap);
+                    createHeatMap(linearHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.linearHeatMap);
 
-                $('<h3>Kinetic Heat Map</h3>').appendTo($page_obj.kineticHeatMap);
-                createTree(kineticHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.kineticHeatMap);
-                createHeatMap(kineticHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.kineticHeatMap);
-            }
-
-            // console.log(state_object, equation, my_state_obj, currentEQnum);
+                    $('<h3>Kinetic Heat Map</h3>').appendTo($page_obj.kineticHeatMap);
+                    createTree(kineticHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.kineticHeatMap);
+                    createHeatMap(kineticHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.kineticHeatMap);
+                }
+            }, 100, 'pepPicker');
         };
 
         /*                          //
@@ -185,116 +116,51 @@
         $page_obj.linear = {};
         $page_obj.kinetic = {};
 
-        //Now build each side
-        build_columns = function (type) {
-            var part = $page_obj[type], i;
-
-            part.col = $('<div>', {class: 'col col-xs-12 col-sm-6'});
-            part.title = $('<h3>' + uppercase(type) + ' Options</h3>');
-            //equation displays
-            part.equationTitle = $('<h4>Model Parameterized</h4>');
-            part.equation = $('<div>', {
-                style: "min-height: 40px;display: table;"
-            }).append($('<div>', {
-                style: 'display: table-cell;vertical-align:middle;'
-            }).append(
-                M.sToMathE(DATA[0][type].equation.mathType)
-            ));
-
-            //parameter picker
-            part.parameterTitle = $('<h4>Parameter Viewing</h4>');
-            part.parameterPicker = $('<select>', {style: 'vertical-align: middle', class: 'form-control'});
-            //Background Correction
-            part.backCorrTitle = $('<h4>Background Correction</h4>');
-            part.backCorrPicker = $('<select>', {style: 'vertical-align: middle', class: 'form-control'});
-            part.backCorrSelected = $('<div>', {style: 'margin-top:15px;', class: 'text-center'});
-            //Finally the figures themselves
-            part.fig = $('<div>');
-            //And the place for correlation
-            part.f_val = $('<p>', {class: "text-center lead"});
-
-            //add in all the parts in order
-            part.col
-                .append(part.title)
-                .append(part.equationTitle)
-                .append(part.equation)
-                .append(part.parameterTitle)
-                .append(part.parameterPicker)
-                .append(part.backCorrTitle)
-                .append(part.backCorrPicker)
-                .append(part.backCorrSelected)
-                .append(part.fig)
-                .append(part.f_val);
-
-            //Add in the menu options for the parameter
-            for (i = 0; i < my_state_obj[type].params.length; i += 1) {
-                part.parameterPicker.append(
-                    '<option value="' + i + '">' +
-                    my_state_obj[type].params[i] + "</option>"
-                );
-            }
-            part.parameterPicker.change(function (evt) {
-                var selected = evt.target.value;
-                my_state_obj[type].param = selected;
-                pep_picked(thisState);
-            });
-
-            //Now add in menu options for the correction picker
-            part.backCorrPicker.append(
-                '<option value="0">Signal</option>' +
-                '<option value="1">Background</option>' +
-                '<option selected value="2">log_2(s/b)</option>' +
-                '<option value="3">log_2(100(s - b + c_e))</option>'
-            ).change(function (evt) {
-                var selected = evt.target.value, key2, ce;
-                currentEQnum[type] = selected;
-                switch (selected) {
-                case "0":
-                    part.backCorrSelected.html('signal');
-                    equation[type] = retSignal;
-                    break;
-                case "1":
-                    part.backCorrSelected.html('background');
-                    equation[type] = retBack;
-                    break;
-                case "2":
-                    part.backCorrSelected.html(M.sToMathE("log_2({signal}/{background})"));
-                    equation[type] = retSigDBack;
-                    break;
-                case "3":
-                    part.backCorrSelected.html(M.sToMathE("log_2{100(signal-background+c_e)}"));
-                    equation[type] = retSigMBack;
-                    break;
-                }
-                pep_picked(thisState);
-                if (selected === "3") {
-                    key2 = type === 'kinetic'
-                        ? thisState.exposure
-                        : thisState.cycle;
-                    ce = 1 - minimums[type][my_state_obj[type].param][key2];
-                    // console.log(ce);
-                    part.backCorrSelected.append(",&nbsp;&nbsp;").append(
-                        M.sToMathE("c_e=" + ce.toFixed(4))
-                    );
-                }
-            });
-
-            //default for equation viewed
-            part.backCorrSelected.html(M.sToMathE("log_2({signal}/{background})"));
-        };
-
         // Add in the components that create the image picker
         imgPicker = KINOME.imagePicker(DATA);
+        eqPicker = KINOME.equationPicker(DATA, imgPicker, true);
+
         imgPicker.div.appendTo($div);
-        imgPicker.change(pep_picked);
+        eqPicker.div.appendTo($div);
+        eqPicker.change(pep_picked);
         imgPicker.disableSample();
 
         // Create the parameter options
-        build_columns('linear');
-        build_columns('kinetic');
         $page_obj.figures
             .append($page_obj.linear.col)
             .append($page_obj.kinetic.col);
+
+        //filters
+        $page_obj.filterHolder = $('<div>', {'class': 'row'});
+        $page_obj.filterSwitches = $('<div>', {'class': 'col-sm-6', style: 'margin-top:10px'}).append('<h4 class="page-header">Choose Pre-Clustering Filter</h4>');
+        $('<div>', {'class': 'btn-group', 'data-toggle': 'buttons'})
+            .append($('<label>', {'class': 'btn btn-default btn-lg active', text: 'None'})
+                .append($('<input>', {'type': 'radio', 'name': 'options', 'autocomplete': 'off'}))
+                .on('click', function () {
+                    my_state_obj.filter = "none";
+                    my_state_obj.filterVal = 0;
+                    pep_picked(thisState);
+                }))
+            .append($('<label>', {'class': 'btn btn-default btn-lg', text: 'F-statistic'})
+                .append($('<input>', {'type': 'radio', 'name': 'options', 'autocomplete': 'off'}))
+                .on('click', function () {
+                    my_state_obj.filter = "anova";
+                    my_state_obj.filterVal = -1;
+                    pep_picked(thisState);
+                }))
+            .append($('<label>', {'class': 'btn btn-default btn-lg', text: 'Variance'})
+                .append($('<input>', {'type': 'radio', 'name': 'options', 'autocomplete': 'off'}))
+                .on('click', function () {
+                    my_state_obj.filter = "variance";
+                    my_state_obj.filterVal = -1;
+                    pep_picked(thisState);
+                }))
+            .appendTo($page_obj.filterSwitches);
+
+        $page_obj.filterBar = $('<div>', {'class': 'col-sm-6', style: 'margin-top:10px'});
+        $page_obj.filterHolder
+            .append($page_obj.filterSwitches)
+            .append($page_obj.filterBar);
 
         // Heat Map locations
         $page_obj.heatMaps = $('<div>', {'class': 'row'});
@@ -307,6 +173,7 @@
 
         // add everything to the main page divs
         $page_obj.div
+            .append($page_obj.filterHolder)
             .append($page_obj.title)
             // .append($page_obj.groupHeading)
             .append($page_obj.figures)
@@ -318,19 +185,6 @@
 
         //finally add on resize function, this makes sure that the figures
         // remain the correct size.
-        var waitForFinalEvent = (function () {
-            var timers = {};
-            return function (callback, ms, uniqueId) {
-                if (!uniqueId) {
-                    uniqueId = "Don't call this twice without a uniqueId";
-                }
-
-                if (timers[uniqueId]) {
-                    clearTimeout(timers[uniqueId]);
-                }
-                timers[uniqueId] = setTimeout(callback, ms);
-            };
-        }());
         window.addEventListener("resize", function () {
             waitForFinalEvent(function () {
                 pep_picked(thisState);
@@ -346,9 +200,9 @@
      * @param Object state The current state of the machine indicating cycle, exposure, and equations
      * @return Array The matrix containing all corrected parameters for all peptides across all samples
      */
-    var calculateValues = function(data, equation, type, state) {
-        var values = [],
-            peptides = data.list('peptides'),
+    calculateValues = function(data, equation, type, state, filter, filterVal, retFilterArr) {
+        var i, j, k, values = [], thisVal, anovas = [], outValues = [], thisF, pepCount = -1, sampCount = 0,
+            peptides = data.list('peptides'), filterArr = [],
             getObject = {
                 type: type
             };
@@ -359,17 +213,167 @@
             getObject.exposure = state.exposure;
         }
 
-        for (var i = 0; i < data.length; i++) {
-            values[i] = [];
-            for (var j = 0; j < peptides.length; j++) {
+        for (i = 0; i < data.length; i += 1) {
+            if (filter === 'anova') {
+                values[data[i].group] = values[data[i].group] || [];
+                values[data[i].group].push([]);
+                thisVal = values[data[i].group][values[data[i].group].length - 1];
+            } else {
+                values[i] = [];
+                thisVal = values[i];
+            }
+            for (j = 0; j < peptides.length; j += 1) {
                 getObject.peptides = peptides[j];
                 // console.log(equation, equation[type], data[i].get(getObject), getObject, data);
-                values[i].push(equation[type](data[i].get(getObject)[0], type));
+                thisVal.push(equation(data[i].get(getObject)[0]));
                 // values[i].push(Math.random());
             }
         }
 
-        return values;
+        if (filter === 'anova') {
+            outValues = [];
+            for (k = 0; k < values[0][0].length; k += 1) { // by peptide
+                anovas = [];
+                sampCount = 0;
+                for (i = 0; i < values.length; i += 1) { // By group
+                    anovas[i] = [];
+                    for (j = 0; j < values[i].length; j += 1) { // By sample
+                        outValues[sampCount] = outValues[sampCount] || [];
+                        anovas[i].push(values[i][j][k]);
+                        sampCount += 1;
+                    }
+                }
+                //calculate f_stat
+                thisF = f_stat(anovas);
+                filterArr.push(thisF);
+
+                //store the data
+                if (thisF > filterVal) {
+                    pepCount += 1;
+                    sampCount = 0;
+                    for (i = 0; i < values.length; i += 1) { // By group
+                        for (j = 0; j < values[i].length; j += 1) { // By sample
+                            outValues[sampCount][pepCount] = values[i][j][k];
+                            sampCount += 1;
+                        }
+                    }
+                }
+            }
+        } else if (filter === 'variance') {
+            for (j = 0; j < values[0].length; j += 1) { // By peptide
+                anovas = [];
+                for (i = 0; i < values.length; i += 1) { // By sample
+                    outValues[i] = outValues[i] || [];
+                    anovas.push(values[i][j]);
+                }
+                thisF = f_stat.variance(anovas);
+                filterArr.push(thisF);
+                if (thisF > filterVal) {
+                    pepCount += 1;
+                    for (i = 0; i < values.length; i += 1) { // By sample
+                        outValues[i][pepCount] = values[i][j];
+                    }
+                }
+            }
+        } else {
+            outValues = values;
+        }
+
+        //This is here for the build slider function to determine min/max vals
+        if (retFilterArr) {
+            return filterArr;
+        }
+
+        //console.log('my out vals', outValues);
+        return outValues;
+    };
+
+    var revNumSort = function (a, b) {
+        return b - a;
+    };
+
+    var buildSlider = function (data, filter_state, picker_state, location, pep_picked) {
+
+        //create a header
+        $('<h4 class="page-header">' + (
+            filter_state.filter === 'anova'
+                ? 'Minimum Included F-statistic'
+                : filter_state.filter === 'variance'
+                    ? 'Minimum Included Variance'
+                    : 'Select a filter'
+        ) + '</h4>').appendTo(location);
+
+        var $sliderDiv = $('<div id="filter-slider" class="sliders"></div>').appendTo(location),
+            $slider = $('<input type="text" />'),
+            filterVals,
+            max,
+            formatter,
+            changer;
+
+        formatter = function (val) {
+            return val;
+        };
+        changer = function (val) {
+            return val;
+        };
+
+
+        // save the state of the slider
+        $slider.appendTo($sliderDiv);
+
+        if (filter_state.filter === 'anova' || filter_state.filter === 'variance') {
+
+            //Calculate max values
+            filterVals = calculateValues(data, picker_state.eq.linear.eval, 'linear', picker_state, filter_state.filter, filter_state.filterVal, true);
+            filterVals = filterVals.concat(calculateValues(data, picker_state.eq.linear.eval, 'linear', picker_state, filter_state.filter, filter_state.filterVal, true)).sort(revNumSort);
+
+            //get max and adjust as needed
+            max = filterVals[Math.floor(filterVals.length * 0.05)];
+            if (max < 25) {
+                formatter = function (val) {
+                    var thisVal = val / 25 * max;
+                    thisVal = thisVal.toPrecision(3);
+                    return thisVal * 1;
+                };
+                changer = function (val) {
+                    return val * 25 / max;
+                };
+            }
+
+            if ((!filter_state.filterVal && filter_state.filterVal !== 0) || filter_state.filterVal < 0 || filter_state.filterVal > max) {
+                filter_state.filterVal = max / 25 * 2;
+            }
+
+            $slider.slider({
+                value: changer(filter_state.filterVal),
+                min: 0,
+                max: changer(max),
+                tooltip_position: 'bottom',
+                tooltip: 'always',
+                formatter: formatter
+            }).on('slideStop', function (e) {
+                if (e.value !== changer(filter_state.filterVal)) {
+                    filter_state.filterVal = formatter(e.value);
+                    pep_picked(picker_state);
+                }
+            });
+        } else {
+            $slider.slider({
+                value: 1,
+                min: 0,
+                max: 2,
+                tooltip_position: 'bottom',
+                tooltip: 'always',
+                enabled: false,
+                formatter: function () {
+                    return "N/A";
+                }
+            });
+        }
+    };
+
+    var capitalize = function(string) {
+        return string.charAt(0).toUpperCase() + string.slice(1);
     };
 
     var matrix_transpose = function (M) {
@@ -411,13 +415,13 @@
      * @return Array The matrix containing all corrected parameters for all peptides across all samples
      */
     var normalizeValues = function(values) {
-        var max = -Infinity,
+        var i, j, max = -Infinity,
             min = Infinity;
 
-        for (var i = 0; i < values.length; i++) {
+        for (i = 0; i < values.length; i += 1) {
             // find max
-            for (var j = 0; j < values[i].length; j++) {
-                if (! isNaN(values[i][j])) {
+            for (j = 0; j < values[i].length; j += 1) {
+                if (!Number.isNaN(values[i][j])) {
                     max = Math.max(values[i][j], max);
                     min = Math.min(values[i][j], min);
                 }
@@ -425,8 +429,8 @@
         }
 
         // divide all values by max to normalize
-        for (var i = 0; i < values.length; i++) {
-            for (var j = 0; j < values[i].length; j++) {
+        for (i = 0; i < values.length; i += 1) {
+            for (j = 0; j < values[i].length; j += 1) {
                 values[i][j] = (values[i][j] - min) / (max - min);
             }
         }
@@ -458,7 +462,7 @@
         var width = widthDiv.width(),
             height = 180;
 
-        var cluster = d3.layout.cluster()
+        cluster = d3.layout.cluster()
             .size([width - 10, height - 70]);
 
         var svg = d3.select($treeDiv[0]).append("svg")
@@ -507,11 +511,13 @@
     };
 
     var createHeatMap = function(values, widthDiv) {
-        var canvas = document.createElement('canvas'),
+        var i, j, canvas = document.createElement('canvas'),
             ctx,
             numRows = values[0].length,
             numCols = values.length,
-            rowScale = 4,
+            rowScale = numRows < 80 
+                ? 4 * 80 / numRows
+                : 4,
             colScale;
 
         canvas.width = widthDiv.width();
@@ -520,8 +526,8 @@
 
         ctx = canvas.getContext('2d');
 
-        for (var i = 0; i < values.length; i++) {
-            for (var j = 0; j < values[i].length; j++) {
+        for (i = 0; i < values.length; i += 1) {
+            for (j = 0; j < values[i].length; j += 1) {
                 ctx.fillStyle = KINOME.gradient.convert(values[i][j]);
                 ctx.fillRect(i * colScale, j * rowScale, colScale, rowScale);
             }
@@ -530,9 +536,58 @@
         return $(canvas);
     };
 
+    var f_stat = (function () {
+        var add = function (a, b) {
+            return a + b;
+        };
+        var mean = function (arr) {
+            return arr.reduce(add) / arr.length;
+        };
+        var sse = function (arr, avg) {
+            var i, sum = 0;
+            avg = avg || mean(arr);
+            for (i = 0; i < arr.length; i += 1) {
+                sum += Math.pow(arr[i] - avg, 2);
+            }
+            return sum;
+        };
+        var concatArrs = function (a, b) {
+            return a.concat(b);
+        };
+        var main = function (arrs) {
+            var newArr = [], i, totalSampleSize = 0, bgv = 0, wgv = 0, indMean, overallMean = mean(arrs.reduce(concatArrs));
+            // Get rid of empty array spots (special for for this module)
+            for (i = 0; i < arrs.length; i += 1) {
+                if (arrs[i].length > 1) {
+                    newArr.push(arrs[i]);
+                }
+            }
+            arrs = newArr;
+            if (arrs.length < 2 || arrs[0].length < 2 || arrs[1].length < 2) {
+                return NaN;
+            }
+            for (i = 0; i < arrs.length; i += 1) {
+                indMean = mean(arrs[i]);
+                bgv += arrs[i].length * Math.pow(indMean - overallMean, 2);
+                wgv += sse(arrs[i], indMean);
+                totalSampleSize += arrs[i].length;
+            }
+
+            bgv /= (arrs.length - 1);
+            wgv /= (totalSampleSize - arrs.length);
+
+            return bgv / wgv;
+        };
+
+        main.variance = function (arr) {
+            return sse(arr) / (arr.length - 1);
+        };
+
+        return main;
+    }());
+
     //get stuff building
     (function () {
-        
         Promise.all(requires).then(function () {
             var $div = KINOME.addAnalysis('Heat Map');
             buildFigures($div, KINOME.get({level: '^2'}));

@@ -31,6 +31,8 @@ var fout = "", databaseForMongo = "";
 (function () {
     'use strict';
 
+    var RUN_MULTP = false;
+
     writeFilePromise = function (data, filename) {
         return new Promise(function (resolve, reject) {
             fs.writeFile(fout + filename, data, function (err) {
@@ -220,7 +222,7 @@ var fout = "", databaseForMongo = "";
         ).replace(/\s+/g, ' '); //get rid of all space characters
     };
 
-    runanalyses = function (data) {
+    runanalyses = function (data, cnt) {
         /*
             This gets a data object, intialized names, lvl_1_0_0, and equation.
 
@@ -232,6 +234,62 @@ var fout = "", databaseForMongo = "";
 
             The next step is to smooth the backgrounds
         */
+
+        cnt = cnt || "";
+
+        //check for 1* arrays and remove them since background norm does not
+            // work with them
+        (function () {
+            var i, a;
+            for (i = 0; i < data.lvl_1_0_0.length; i += 1) {
+                if (data.lvl_1_0_0[i].name.match(/^1/)) {
+                    a = data.lvl_1_0_0.splice(i, 1);
+                    data.name.splice(i, 1);
+                    i -= 1;
+                    console.warn('!! Removing large ptk chip. ' + a.name + ' !!');
+                }
+            }
+        }());
+
+        //Create bite sized parts
+        if (data.lvl_1_0_0.length > 100) {
+            RUN_MULTP = true;
+            var max = data.lvl_1_0_0.length,
+                count = 0,
+                i,
+                p_chain = Promise.resolve(),
+                perSet = 100,
+                startOneChain;
+
+            startOneChain = function (prom, my_cnt, my_i) {
+                return prom.then(function () {
+                    //Log that it is starting
+                    console.log('\n\nRunning set ' + my_cnt + 'of ' + (max / perSet + 1) + '.\n\n');
+
+                    //Actually run the analysis on the first per set
+                    return runanalyses(
+                        {
+                            name: data.name.slice(my_i, Math.min(max, my_i + perSet)),
+                            equation: data.equation,
+                            lvl_1_0_0: data.lvl_1_0_0.slice(my_i, Math.min(max, my_i + perSet))
+                        },
+                        'part' + my_cnt + '-'
+                    );
+                });
+            };
+
+            console.log('\n\n!! There are too many barcodes (' + max + ') to run this in one go. It will instead run in series.\n\n');
+
+            //Set up chain
+            for (i = 0; i < max; i += perSet) {
+                count += 1;
+                p_chain = startOneChain(p_chain, count, i);
+            }
+            return p_chain.then(function () {
+                console.log('all done!');
+                process.exit();
+            });
+        }
 
         data.lvl_1_0_0 = add_get(data.lvl_1_0_0);
         var barBuilder = function (msg) {
@@ -254,7 +312,7 @@ var fout = "", databaseForMongo = "";
             };
         };
 
-        filter({
+        return filter({
             data: data.lvl_1_0_0,
             amd_ww: amd_ww,
             equation: data.equation,
@@ -263,6 +321,10 @@ var fout = "", databaseForMongo = "";
             linearUpdate: barBuilder('fitting linear'),
             kineticUpdate: barBuilder('fitting kinetic')
         }).then(function (d) {
+            //hopefully help with memory management
+            //delete require.cache[require.resolve('amd_ww')];
+            //amd_ww = require('amd_ww').amd_ww
+
             data.lvl_1_0_1 = d;
         }).then(timeoutPromise).catch(function (err) {
             console.error('fitting failed', err);
@@ -276,6 +338,7 @@ var fout = "", databaseForMongo = "";
                 number_threads: 64
             });
         }).then(function (d112) {
+            delete require.cache[require.resolve('amd_ww')];
             data.lvl_1_1_2 = d112;
         }).then(timeoutPromise).catch(function (err) {
             console.error(err);
@@ -307,12 +370,12 @@ var fout = "", databaseForMongo = "";
             data.lvl_2_1_2 = res;
             console.log('writing files');
             var ps = [];
-            ps[0] = writeFilePromise(data.name.map(stringify).join('\n'), 'names.mdb');
-            ps[1] = writeFilePromise(data.lvl_1_0_0.map(stringify).join('\n'), 'lvl_1_0_0.mdb');
-            ps[2] = writeFilePromise(data.lvl_1_0_1.map(stringify).join('\n'), 'lvl_1_0_1.mdb');
-            ps[3] = writeFilePromise(data.lvl_1_1_2.map(stringify).join('\n'), 'lvl_1_1_2.mdb');
-            ps[4] = writeFilePromise(data.lvl_2_0_1.map(stringify).join('\n'), 'lvl_2_0_1.mdb');
-            ps[5] = writeFilePromise(data.lvl_2_1_2.map(stringify).join('\n'), 'lvl_2_1_2.mdb');
+            ps[0] = writeFilePromise(data.name.map(stringify).join('\n'), cnt + 'names.mdb');
+            ps[1] = writeFilePromise(data.lvl_1_0_0.map(stringify).join('\n'), cnt + 'lvl_1_0_0.mdb');
+            ps[2] = writeFilePromise(data.lvl_1_0_1.map(stringify).join('\n'), cnt + 'lvl_1_0_1.mdb');
+            ps[3] = writeFilePromise(data.lvl_1_1_2.map(stringify).join('\n'), cnt + 'lvl_1_1_2.mdb');
+            ps[4] = writeFilePromise(data.lvl_2_0_1.map(stringify).join('\n'), cnt + 'lvl_2_0_1.mdb');
+            ps[5] = writeFilePromise(data.lvl_2_1_2.map(stringify).join('\n'), cnt + 'lvl_2_1_2.mdb');
 
             if (databaseForMongo) {
                 var psMongo = [];
@@ -331,11 +394,12 @@ var fout = "", databaseForMongo = "";
                 console.error("A file failed to write", err);
             });
         }).then(function () {
-            console.log('all done!');
-            process.exit(0);
+            if (!RUN_MULTP) {
+                console.log('all done!');
+                process.exit(0);
+            }
+            return;
         });
-
-        return;
     };
 
     return colors;

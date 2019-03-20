@@ -17,8 +17,8 @@
         cookieParser;
 
     if (addUABAuth) {
-        auth = require("./saml_auth2.js");
-        users = require("./acceptedUsers.js");
+        auth = require("./src_auth/saml_auth2.js");
+        users = require("./src_auth/acceptedUsers.js");
         cookieParser = require('restify-cookies');
     }
 

@@ -1,11 +1,26 @@
 (function () {
     'use strict';
 
+    /**************************************************************************/
+    // Set this to false for installations, specifically created to allow
+        // access to UAB SAML authentication mechanism for privileged data
+        // access and editing.
+    var addUABAuth = true;
+    /**************************************************************************/
+
     /*The following is for the external db*/
 
     var restify = require('restify'),
         server = require("./server_library.js"),
+        auth,
+        users,
+        cookieParser;
+
+    if (addUABAuth) {
         auth = require("./saml_auth2.js");
+        users = require("./acceptedUsers.js");
+        cookieParser = require('restify-cookies');
+    }
 
     //, ObjectId = require('mongodb').ObjectID;
 
@@ -53,6 +68,10 @@
     server2.use(restify.bodyParser());
     server2.use(restify.CORS({}));
 
+    if (addUABAuth) {
+        server2.use(cookieParser.parse);
+    }
+
     server2.get(/\/img\/kinome\/?.*/, restify.serveStatic({
         directory: "/var/www"
     }));
@@ -70,9 +89,22 @@
     server2.get("/2.0.0/:collection_name/:doc_id", server["2.0.0"].grabDocument); // Must be the last thing in the form
 
     // Login parameters
-    server2.get("/login", auth.login);
-    server2.post("/login/callback", auth.post_token);
-    server2.get("/metadata", auth.metadata);
+    if (addUABAuth) {
+        server2.get("/login", auth.login);
+        server2.post("/login/callback", auth.post_token(users.new_login));
+        server2.get("/metadata", auth.metadata);
+        server2.get("/test", function (req, res, next) {
+            users.permission(req).then(function (perms) {
+                console.log(perms, "checked for perms");
+                if (perms) {
+                    res.send("true: " + perms);
+                } else {
+                    res.send("false:" + perms);
+                }
+                return next();
+            });
+        });
+    }
 
     // Listen
     server2.listen(8080, function () {

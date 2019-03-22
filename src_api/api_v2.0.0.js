@@ -39,7 +39,7 @@
     }());
 
     checkPerm = function (request, type) {
-        let perms; 
+        let perms;
         //returns a promise which results in a permission object
         //request.params.collection
         //request.params.database

@@ -1,0 +1,27 @@
+// example mongo permissions object -> add to users.accepted
+{
+    email: 'blank@blank.top-level-domain',
+    permissions : [
+        {
+            database: 'kinome',
+            collections: [
+                {name: 'lvl_1.0.0', read: true, write: false},
+                {name: 'lvl_1.0.1', read: true, write: false},
+                {name: 'lvl_1.1.2', read: true, write: false},
+                {name: 'lvl_2.0.1', read: true, write: false},
+                {name: 'lvl_2.1.2', read: true, write: false},
+                {name: 'name', read: true, write: false}
+            ],
+        }, {
+            database: 'passages',
+            collections: [
+                {name: 'passages', read: false, write: false},
+            ]
+        }, {
+            database: 'users',
+            collections: [
+                {name: 'accepted', read: false, write: false},
+            ]
+        }
+    ]
+}

@@ -11,7 +11,10 @@
     /*The following is for the external db*/
 
     var restify = require('restify'),
-        server = require("./server_library.js"),
+        server = {
+            '1.0.0': require("./src_api/server_library.js"),
+            '2.0.0': require("./src_api/api_v2.0.0.js")
+        },
         auth,
         users,
         cookieParser;
@@ -20,6 +23,10 @@
         auth = require("./src_auth/saml_auth2.js");
         users = require("./src_auth/acceptedUsers.js");
         cookieParser = require('restify-cookies');
+    } else {
+        // This will just return a basic use object for use with the v2 API
+        users = {};
+        users.permission = require("./src_auth/acceptedUsers.js").permission;
     }
 
     //, ObjectId = require('mongodb').ObjectID;
@@ -72,6 +79,7 @@
         server2.use(cookieParser.parse);
     }
 
+    //static serving of flat files
     server2.get(/\/img\/kinome\/?.*/, restify.serveStatic({
         directory: "/var/www"
     }));
@@ -84,9 +92,14 @@
     /*The following is for the external db*/
     server2.get("/1.0.0/:collection_name", server["1.0.0"].grabDbName);
     server2.get("/1.0.0/:collection_name/:doc_id", server["1.0.0"].grabDocument);
-    server2.get("/2.0.0/:collection_name", server["2.0.0"].grabDbName);
-    server2.get("/2.0.0/:collection_name/list", server["2.0.0"].list);
-    server2.get("/2.0.0/:collection_name/:doc_id", server["2.0.0"].grabDocument); // Must be the last thing in the form
+
+    // API v 2.0.0
+    server2.get("/2.0.0/list/:database/:collection", server["2.0.0"].list);
+    //server2.get("/2.0.0/search/:database/:collection/");
+    server2.get("/2.0.0/get/:database/:collection/:doc_id", server["2.0.0"].get);
+    server2.post("/2.0.0/put/:database/:collection/:doc_id", server["2.0.0"].put);
+    server2.post("/2.0.0/post/:database/:collection", server["2.0.0"].post);
+
 
     // Login parameters
     if (addUABAuth) {
@@ -96,10 +109,10 @@
         server2.get("/test", function (req, res, next) {
             users.permission(req).then(function (perms) {
                 console.log(perms, "checked for perms");
-                if (perms) {
-                    res.send("true: " + perms);
+                if (perms.email) {
+                    res.send({logged_in: true, resp: perms});
                 } else {
-                    res.send("false:" + perms);
+                    res.send({logged_in: false, resp: perms});
                 }
                 return next();
             });

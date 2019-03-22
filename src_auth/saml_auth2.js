@@ -66,7 +66,7 @@
                         }, 1000 * 60 * 10);
                     }(id));
 
-                    callback(results.extract.nameID, sentKeys[id].redirect, req, res, next);
+                    callback(results.extract.nameID, sentKeys[id].redirect, sentKeys[id].tag, req, res, next);
                 })
                 .catch(function (err) {
                     console.log(bodyObj);
@@ -74,7 +74,7 @@
                     res.send(500, {
                         error: {
                             code: "500",
-                            message: err.message
+                            message: "Failed to parse message from the IDP server: " + err.message
                         }
                     });
                 });

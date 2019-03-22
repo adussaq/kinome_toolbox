@@ -143,6 +143,7 @@
     };
 
     put = function (request) {
+        // This is an update command
         return checkPerm(request, 'write').then(function () {
             // If I am here, I am authenticated, otherwise
                // an error will have been thrown.
@@ -151,10 +152,27 @@
     };
 
     post = function (request) {
+        // this is to add a new object
         return checkPerm(request, 'write').then(function () {
             // If I am here, I am authenticated, otherwise
                // an error will have been thrown.
-            return {data: [], message: "Not yet defined", links: {self: 'http://' + request.headers.host + request.url}};
+            // connect to the database
+            return connect(request.params.database);
+        }).then(function (db) {
+            // insert the object
+            return new Promise(function (resolve, reject) {
+                if (request.headers["content-type"].toLowerCase() !== "application/json") {
+                    reject(new Error("403: Only JSON type is accepted."));
+                } else {
+                    db.collection(request.params.collection).insertOne(request.body, function (err, data) {
+                        if (err) {
+                            reject(new Error('500: Failed to add a new key.\n' + err.message));
+                        } else {
+                            resolve({success: true, data: [data], message: "Successfully posted object", links: {self: 'http://' + request.headers.host + request.url}});
+                        }
+                    });
+                }
+            });
         });
     };
 

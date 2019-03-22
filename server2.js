@@ -69,7 +69,7 @@
     */
 
     var server2 = restify.createServer({
-        accept: ['application/json', 'image/tif', 'image/png']
+        accept: ['application/json']
     });
     server2.use(restify.queryParser());
     server2.use(restify.bodyParser());

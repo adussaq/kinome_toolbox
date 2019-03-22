@@ -166,6 +166,7 @@
 
     check_for_permissions = function (req, key) {
         //check cookies for key
+        console.log('here is the key...', key);
         let searchTerm, ret, basePerms = {
             permissions: [{
                 database: 'kinome',
@@ -191,6 +192,7 @@
 
         if (key) {
             searchTerm = {};
+            console.log('here is the key now...', key);
             searchTerm[ID] = new ObjectID(key);
             ret = mcl.then(function (db) {
                 return new Promise(function (resolve) {

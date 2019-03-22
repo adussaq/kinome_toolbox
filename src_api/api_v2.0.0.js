@@ -6,6 +6,7 @@
     const ObjectID = require('mongodb').ObjectID;
     const database_core = 'mongodb://localhost:27017/';
     const ID = "_id";
+    const SET = "$set";
 
     let lib = {}, findToArray, caller, list, get, put, post, checkPerm, connect;
 
@@ -48,8 +49,9 @@
 
         if (request.query && request.query.api_key) {
             perms = permission(request, request.query.api_key);
+        } else {
+            perms = permission(request);
         }
-        perms = permission(request);
         return perms.then(function (perm_obj) {
             let i, j, ret = false;
             // look for database
@@ -62,7 +64,7 @@
                         if (perm_obj.permissions[i].collections[j].name.toLowerCase() === request.params.collection.toLowerCase()) {
                             // permission to read/write?
                             if (perm_obj.permissions[i].collections[j][type]) {
-                                ret = true;
+                                ret = perm_obj[ID];
                             }
                         }
                     }
@@ -73,7 +75,24 @@
             throw new Error('500: Check for authentication failed.');
         }).then(function (allowed) {
             if (allowed) {
-                return true;
+                // return a function for updating active keys object
+                return (function (id_str) {
+                    return function (update_obj) {
+                        return connect('users').then(function (db) {
+                            let findObj = {};
+                            findObj[ID] = new ObjectID(id_str);
+                            return new Promise(function (resolve, reject) {
+                                db.collection('active_keys').updateOne(findObj, update_obj, {}, function (err, res) {
+                                    if (err) {
+                                        reject(err);
+                                    } else {
+                                        resolve(res);
+                                    }
+                                });
+                            });
+                        });
+                    };
+                }(allowed));
             }
             throw new Error('401: User is not authenticated for that action.');
         });
@@ -106,6 +125,9 @@
                 return connect(request.params.database);
             }).then(function (db) {
                 // Actually do the search
+                if (request.query.all && request.query.all.toLowerCase() === "true") {
+                    return findToArray(db, request.params.collection, {});
+                }
                 return findToArray(db, request.params.collection, {}, collection_default_find);
             }).then(function (arr) {
                 return {
@@ -143,11 +165,45 @@
     };
 
     put = function (request) {
-        // This is an update command
-        return checkPerm(request, 'write').then(function () {
+        // this is to edit an old object
+        return checkPerm(request, 'write').then(function (store_changes) {
             // If I am here, I am authenticated, otherwise
                // an error will have been thrown.
-            return {data: [], message: "Not yet defined", links: {self: 'http://' + request.headers.host + request.url}};
+            // connect to the database
+            return connect(request.params.database);
+        }).then(function (db) {
+            // insert the object
+            return new Promise(function (resolve, reject) {
+                let searchObj = {}, obj_id, edit_body = {};
+                edit_body[SET] = request.body;
+
+                //verify doc id
+                if (request.params.database.toLowerCase() === "kinome") {
+                    if (request.params.doc_id.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)) {
+                        obj_id = request.params.doc_id;
+                    } else {
+                        reject("403: Improperly formed id for database entry.");
+                    }
+                } else {
+                    obj_id = new ObjectID(request.params.doc_id);
+                }
+
+                //verify header type
+                if (request.headers["content-type"].toLowerCase() !== "application/json") {
+                    reject(new Error("403: Only JSON type is accepted."));
+                } else {
+
+                    //verified issues, actually update
+                    searchObj[ID] = obj_id;
+                    db.collection(request.params.collection).updateOne(searchObj, edit_body, {upsert: false}, function (err, data) {
+                        if (err) {
+                            reject(new Error('500: Failed to add a new key.\n' + err.message));
+                        } else {
+                            resolve({success: true, data: [data], message: "Successfully posted object", links: {self: 'http://' + request.headers.host + request.url}});
+                        }
+                    });
+                }
+            });
         });
     };
 

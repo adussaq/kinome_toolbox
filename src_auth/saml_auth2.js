@@ -7,8 +7,8 @@
     var sentKeys = {};
 
     // Set up auth
-    // var idp_xml_file = "./keys/uab-shib-metadata.xml";
-    var idp_xml_file = "./keys/sample_idp.xml";
+    var idp_xml_file = "./keys/uab-shib-metadata.xml";
+    // var idp_xml_file = "./keys/sample_idp.xml";
     var service_provider_xml_file = "./keys/sample_sp.xml";
     var service_provider_xml_file_read = fs.readFileSync(service_provider_xml_file, 'utf8');
 

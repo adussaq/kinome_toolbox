@@ -8,6 +8,7 @@
     const database = 'mongodb://localhost:27017/users';
     const ID = "_id";
     const ObjectID = require('mongodb').ObjectID;
+    const PUSH = "$push";
 
     sendError = function (res, next) {
         return function (err) {
@@ -130,11 +131,65 @@
                     tempObj = {};
                     tempObj[ID] = new ObjectID(qRes[0][ID]);
                     return new Promise(function (resolve, reject) {
-                        col_active_keys.deleteOne(tempObj, {}, function (err) {
-                            if (err) {
-                                reject(new Error('500: Failed to delete expired key.'));
+                        // store the active part and delete the rest
+                        let updateObj = {}, mongoObj = {}, traverseObj = qRes[0], i;
+                        updateObj.time = new Date();
+                        updateObj.changes = [];
+
+                        // store the original original for all changes made in the given timeframe
+                        if (traverseObj.hasOwnProperty("changes")) {
+
+                            // sort them to find first change to a given object
+                            traverseObj.changes = traverseObj.changes.sort(function (a, b) {
+                                // first by database
+                                let dbComp = a.database.localeCompare(b.database),
+                                    colComp = a.collection.localeCompare(b.collection),
+                                    idComp = a.entry_id.toHexString().localeCompare(b.entry_id.toHexString()),
+                                    timeComp = a.time - b.time;
+                                if (dbComp) {
+                                    return dbComp;
+                                }
+                                if (colComp) {
+                                    return colComp;
+                                }
+                                if (idComp) {
+                                    return idComp;
+                                }
+                                return timeComp;
+                            });
+
+                            for (i = 0; i < traverseObj.changes.length; i += 1) {
+                                // original entry checker: // i=0 OR dbs different OR collections different OR ids different
+                                if (
+                                    i === 0 ||
+                                    traverseObj.changes[i - 1].database !== traverseObj.changes[i].database ||
+                                    traverseObj.changes[i - 1].collection !== traverseObj.changes[i].collection ||
+                                    traverseObj.changes[i - 1].entry_id.toHexString() !== traverseObj.changes[i].entry_id.toHexString()
+                                ) {
+                                    delete traverseObj.changes[i].command;
+                                    delete traverseObj.changes[i].time;
+                                    updateObj.changes.push(traverseObj.changes[i]);
+                                }
                             }
-                            resolve();
+
+                        }
+
+                        // set object for actual database
+                        mongoObj[PUSH] = {
+                            updates: updateObj
+                        };
+
+                        db.collection('changes').update({email: qRes[0].email}, mongoObj, {upsert: true}, function (err) {
+                            if (err) {
+                                reject(new Error('500: Failed to store changes from expired key.'));
+                            } else {
+                                col_active_keys.deleteOne(tempObj, {}, function (err) {
+                                    if (err) {
+                                        reject(new Error('500: Failed to delete expired key.'));
+                                    }
+                                    resolve();
+                                });
+                            }
                         });
                     }).then(function () {
                         return approved(db, username, perms, redirect, tag, req, res, next);

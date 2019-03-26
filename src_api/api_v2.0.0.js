@@ -7,6 +7,7 @@
     const database_core = 'mongodb://localhost:27017/';
     const ID = "_id";
     const SET = "$set";
+    const PUSH = "$push";
 
     let lib = {}, findToArray, caller, list, get, put, post, checkPerm, connect;
 
@@ -77,12 +78,31 @@
             if (allowed) {
                 // return a function for updating active keys object
                 return (function (id_str) {
-                    return function (update_obj) {
+                        // scopes the user id/key and returns a function to be
+                            // called and passed an object representing changes
+                            // made by last put/post command
+                    return function (update_obj) { // object to add
                         return connect('users').then(function (db) {
-                            let findObj = {};
+                            let findObj = {}, obj_update_mongo = {}, key;
                             findObj[ID] = new ObjectID(id_str);
+
+                            // update_obj should be in the following form:
+                                // {database: <>, collection: <>, entry_id: <>, command: <>, original_document: <>}
+
+                            // object in namespace should be:
+                                // changes: {database: {<id>: {commands: [<update objects>]}}}
+
+                            //set a time for the update
+                            update_obj.time = new Date();
+
+                            //create the key for an update
+                            key = "changes";//." + update_obj.database.toLowerCase() + '.' + update_obj.collection.toLowerCase() + '.' + update_obj.entry_id;
+
+                            obj_update_mongo[PUSH] = {};
+                            obj_update_mongo[PUSH][key] = update_obj;
+
                             return new Promise(function (resolve, reject) {
-                                db.collection('active_keys').updateOne(findObj, update_obj, {}, function (err, res) {
+                                db.collection('active_keys').updateOne(findObj, obj_update_mongo, {}, function (err, res) {
                                     if (err) {
                                         reject(err);
                                     } else {
@@ -170,38 +190,78 @@
             // If I am here, I am authenticated, otherwise
                // an error will have been thrown.
             // connect to the database
-            return connect(request.params.database);
-        }).then(function (db) {
-            // insert the object
-            return new Promise(function (resolve, reject) {
-                let searchObj = {}, obj_id, edit_body = {};
-                edit_body[SET] = request.body;
+            return connect(request.params.database).then(function (db) {
+                // insert the object
+                return new Promise(function (resolve, reject) {
+                    let searchObj = {}, obj_id, edit_body = {};
+                    edit_body[SET] = request.body;
 
-                //verify doc id
-                if (request.params.database.toLowerCase() === "kinome") {
-                    if (request.params.doc_id.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)) {
-                        obj_id = request.params.doc_id;
-                    } else {
-                        reject("403: Improperly formed id for database entry.");
-                    }
-                } else {
-                    obj_id = new ObjectID(request.params.doc_id);
-                }
-
-                //verify header type
-                if (request.headers["content-type"].toLowerCase() !== "application/json") {
-                    reject(new Error("403: Only JSON type is accepted."));
-                } else {
-
-                    //verified issues, actually update
-                    searchObj[ID] = obj_id;
-                    db.collection(request.params.collection).updateOne(searchObj, edit_body, {upsert: false}, function (err, data) {
-                        if (err) {
-                            reject(new Error('500: Failed to add a new key.\n' + err.message));
+                    //verify doc id
+                    if (request.params.database.toLowerCase() === "kinome") {
+                        if (request.params.doc_id.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)) {
+                            obj_id = request.params.doc_id;
                         } else {
-                            resolve({success: true, data: [data], message: "Successfully posted object", links: {self: 'http://' + request.headers.host + request.url}});
+                            reject("403: Improperly formed id for database entry.");
                         }
+                    } else {
+                        obj_id = new ObjectID(request.params.doc_id);
+                    }
+
+                    //verify header type
+                    if (request.headers["content-type"].toLowerCase() !== "application/json") {
+                        reject(new Error("403: Only JSON type is accepted."));
+                    } else {
+
+                        //verified issues, actually update
+                        searchObj[ID] = obj_id;
+
+                        //find original object
+                        findToArray(db, request.params.collection, searchObj).then(function (found) {
+
+                            //update actual object
+                            db.collection(request.params.collection).updateOne(searchObj, edit_body, {upsert: false}, function (err, data) {
+                                if (err) {
+                                    reject(new Error('500: Failed to add a new key.\n' + err.message));
+                                } else {
+                                    resolve({
+                                        success: true,
+                                        data: [data],
+                                        message: "Successfully posted object",
+                                        inner: {
+                                            request: edit_body[SET],
+                                            original_object: found[0],
+                                            db: request.params.database,
+                                            collection: request.params.collection,
+                                            id: obj_id
+                                        },
+                                        links: {
+                                            self: 'http://' + request.headers.host + request.url
+                                        }
+                                    });
+                                }
+                            });
+                        }).catch(function (err) {
+                            reject(err);
+                        });
+                    }
+                });
+            }).then(function (successful_put) {
+                // data: [{ok: 1, nModified: 1, n: 1}]
+                if (successful_put.data[0].modifiedCount > 0) {
+                    // {database: <>, collection: <>, entry_id: <>, command: <>, original_document: <>}
+                    return store_changes({
+                        database: successful_put.inner.db,
+                        collection: successful_put.inner.collection,
+                        entry_id: successful_put.inner.id,
+                        command: successful_put.inner.request,
+                        original_document: successful_put.inner.original_object
+                    }).then(function () {
+                        delete successful_put.inner;
+                        return successful_put;
                     });
+                } else {
+                    delete successful_put.inner;
+                    return successful_put;
                 }
             });
         });
@@ -209,24 +269,63 @@
 
     post = function (request) {
         // this is to add a new object
-        return checkPerm(request, 'write').then(function () {
+        let req_body = JSON.parse(JSON.stringify(request.body));
+        return checkPerm(request, 'write').then(function (store_changes) {
             // If I am here, I am authenticated, otherwise
                // an error will have been thrown.
             // connect to the database
-            return connect(request.params.database);
-        }).then(function (db) {
-            // insert the object
-            return new Promise(function (resolve, reject) {
-                if (request.headers["content-type"].toLowerCase() !== "application/json") {
-                    reject(new Error("403: Only JSON type is accepted."));
-                } else {
-                    db.collection(request.params.collection).insertOne(request.body, function (err, data) {
-                        if (err) {
-                            reject(new Error('500: Failed to add a new key.\n' + err.message));
-                        } else {
-                            resolve({success: true, data: [data], message: "Successfully posted object", links: {self: 'http://' + request.headers.host + request.url}});
-                        }
+            return connect(request.params.database).then(function (db) {
+                // insert the object
+                return new Promise(function (resolve, reject) {
+                    if (request.headers["content-type"].toLowerCase() !== "application/json") {
+                        reject(new Error("403: Only JSON type is accepted."));
+                    } else {
+                        db.collection(request.params.collection).insertOne(req_body, function (err, data) {
+                            if (err) {
+                                reject(new Error('500: Failed to add a new key.\n' + err.message));
+                            } else {
+                                //data: upsertedId
+                                resolve({
+                                    success: true,
+                                    data: [data],
+                                    message: "Successfully posted object",
+                                    inner: {
+                                        database: request.params.database,
+                                        collection: request.params.collection,
+                                        command: req_body,
+                                        original_document: null
+                                    },
+                                    links: {
+                                        self: 'http://' + request.headers.host + request.url
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }).then(function (successful_post) {
+                let ret = successful_post.data[0].toJSON();
+                ret.id = successful_post.data[0].insertedId;
+
+                // successful_put.data[0].id = successful_put.data[0].upsertedId;
+                // data: [{ok: 1, nModified: 1, n: 1}]
+                if (successful_post.data[0].insertedCount > 0) {
+                    // {database: <>, collection: <>, entry_id: <>, command: <>, original_document: <>}
+                    return store_changes({
+                        database: successful_post.inner.database,
+                        collection: successful_post.inner.collection,
+                        entry_id: successful_post.data[0].insertedId,
+                        command: successful_post.inner.command,
+                        original_document: successful_post.inner.original_object
+                    }).then(function () {
+                        delete successful_post.inner;
+                        successful_post.data[0] = ret;
+                        return successful_post;
                     });
+                } else {
+                    delete successful_post.inner;
+                    successful_post.data[0] = ret;
+                    return successful_post;
                 }
             });
         });

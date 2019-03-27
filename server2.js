@@ -73,7 +73,7 @@
     });
     server2.use(restify.queryParser());
     server2.use(restify.bodyParser());
-    server2.use(restify.CORS({}));
+    server2.use(restify.CORS({credentials: true}));
 
     if (addUABAuth) {
         server2.use(cookieParser.parse);
@@ -110,9 +110,9 @@
             users.permission(req).then(function (perms) {
                 console.log(perms, "checked for perms");
                 if (perms.email) {
-                    res.send({logged_in: true, resp: perms});
+                    res.send({logged_in: true, data: [perms], message: "Based on Cookies this user is logged in."});
                 } else {
-                    res.send({logged_in: false, resp: perms});
+                    res.send({logged_in: false, resp: perms, message: "Based on Cookies this user is not logged in."});
                 }
                 return next();
             });

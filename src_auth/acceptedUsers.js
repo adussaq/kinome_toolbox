@@ -2,19 +2,30 @@
 (function () {
     'use strict';
 
-    let new_login, findToArray, sendError, valid_token, check_for_permissions, mcl, addNewKey, approved;
+    let add_new_user, new_login, findToArray, sendError, valid_token, check_for_permissions, mcl, addNewKey, approved;
 
     const MongoClient = require('mongodb').MongoClient;
     const database = 'mongodb://localhost:27017/users';
     const ID = "_id";
     const ObjectID = require('mongodb').ObjectID;
     const PUSH = "$push";
+    const DEFAULT_PERMS = [{
+        database: 'kinome',
+        collections: [
+            {name: 'lvl_1.0.0', read: true, write: false},
+            {name: 'lvl_1.0.1', read: true, write: false},
+            {name: 'lvl_1.1.2', read: true, write: false},
+            {name: 'lvl_2.0.1', read: true, write: false},
+            {name: 'lvl_2.1.2', read: true, write: false},
+            {name: 'name', read: true, write: false}
+        ]
+    }];
 
     sendError = function (res, next) {
         return function (err) {
             //default error message
             let code = "500";
-            console.log(err, "here with 401 catch");
+            console.log(err);
             if (err.message.match(/^(\d{3}):/)) {
                 code = err.message.replace(/^(\d{3}):[\s\S]+/, "$1");
             }
@@ -37,6 +48,21 @@
                     reject(new Error('500: Server failed to connect to collection: ' + err));
                 } else {
                     resolve(qRes);
+                }
+            });
+        });
+    };
+
+    add_new_user = function (db, email) {
+        return new Promise(function (resolve, reject) {
+            db.collection("accepted").insertOne({
+                email: email,
+                permissions: DEFAULT_PERMS
+            }, function (err) {
+                if (err) {
+                    reject(new Error("500: Failed to create user permissions. " + err.message));
+                } else {
+                    resolve(email);
                 }
             });
         });
@@ -211,8 +237,9 @@
                     return approved(db, username, qRes[0].permissions, redirect, tag, req, res, next);
                 } else {
                     // person does not exist or there are duplicates
-                    console.log('here with 401');
-                    throw new Error("401: Username not found, please contact administrator to add your name to the list of accepted users.");
+                    return add_new_user(db, username).then(function (uname) {
+                        return approved(db, uname, DEFAULT_PERMS, redirect, tag, req, res, next);
+                    });
                 }
             });
         }).catch(sendError(res, next));
@@ -223,17 +250,7 @@
         //check cookies for key
         console.log('here is the key...', key);
         let searchTerm, ret, basePerms = {
-            permissions: [{
-                database: 'kinome',
-                collections: [
-                    {name: 'lvl_1.0.0', read: true, write: false},
-                    {name: 'lvl_1.0.1', read: true, write: false},
-                    {name: 'lvl_1.1.2', read: true, write: false},
-                    {name: 'lvl_2.0.1', read: true, write: false},
-                    {name: 'lvl_2.1.2', read: true, write: false},
-                    {name: 'name', read: true, write: false}
-                ]
-            }],
+            permissions: DEFAULT_PERMS,
             email: false
         };
 

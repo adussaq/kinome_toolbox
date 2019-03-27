@@ -89,11 +89,14 @@
                             // update_obj should be in the following form:
                                 // {database: <>, collection: <>, entry_id: <>, command: <>, original_document: <>}
 
-                            // object in namespace should be:
-                                // changes: {database: {<id>: {commands: [<update objects>]}}}
-
                             //set a time for the update
                             update_obj.time = new Date();
+
+                            //change the changes object to sting so it does not
+                                // break anything
+                            if (typeof update_obj.changes === "object") {
+                                update_obj.changes = JSON.stringify(update_obj.changes);
+                            }
 
                             //create the key for an update
                             key = "changes";//." + update_obj.database.toLowerCase() + '.' + update_obj.collection.toLowerCase() + '.' + update_obj.entry_id;
@@ -194,7 +197,12 @@
                 // insert the object
                 return new Promise(function (resolve, reject) {
                     let searchObj = {}, obj_id, edit_body = {};
-                    edit_body[SET] = request.body;
+
+                    if (request.query.push === "true") {
+                        edit_body[PUSH] = request.body;
+                    } else {
+                        edit_body[SET] = request.body;
+                    }
 
                     //verify doc id
                     if (request.params.database.toLowerCase() === "kinome") {

@@ -94,8 +94,8 @@
 
                             //change the changes object to sting so it does not
                                 // break anything
-                            if (typeof update_obj.changes === "object") {
-                                update_obj.changes = JSON.stringify(update_obj.changes);
+                            if (typeof update_obj.command === "object") {
+                                update_obj.command = JSON.stringify(update_obj.command);
                             }
 
                             //create the key for an update

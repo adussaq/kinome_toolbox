@@ -9,7 +9,26 @@
     const SET = "$set";
     const PUSH = "$push";
 
-    let lib = {}, findToArray, caller, list, get, put, post, checkPerm, connect;
+    let lib = {}, findToArray, caller, list, get, patch, post, checkPerm, connect,
+            clean_request;
+
+    clean_request = function (obj) {
+        let lists = [obj], oneObj, props, i, good = true;
+        while (lists.length && good) {
+            oneObj = lists.shift();
+            props = Object.keys(oneObj);
+            for (i = 0; i < props.length && good; i += 1) {
+                if (typeof oneObj[props[i]] === "object") {
+                    lists.push(oneObj[props[i]]);
+                }
+                //check to see if there is a mongo keyword
+                if (props[i].match(/^\$/)) {
+                    good = false;
+                }
+            }
+        }
+        return good;
+    };
 
     connect = (function () {
         let oneConnection, connections = {};
@@ -40,7 +59,6 @@
     }());
 
     checkPerm = function (request, type) {
-        let perms;
         //returns a promise which results in a permission object
         //request.params.collection
         //request.params.database
@@ -48,43 +66,27 @@
         // permission should be passed an api key if there is one, or will grab
                 // the one that is in cookies if not.
 
-        if (request.query && request.query.api_key) {
-            perms = permission(request, request.query.api_key);
-        } else {
-            perms = permission(request);
-        }
-        return perms.then(function (perm_obj) {
-            let i, j, ret = false;
-            // look for database
-            for (i = 0; i < perm_obj.permissions.length && !ret; i += 1) {
-                //Correct database?
-                if (perm_obj.permissions[i].database.toLowerCase() === request.params.database.toLowerCase()) {
-                    //Look at collections
-                    for (j = 0; j < perm_obj.permissions[i].collections.length && !ret; j += 1) {
-                        //Correct collection?
-                        if (perm_obj.permissions[i].collections[j].name.toLowerCase() === request.params.collection.toLowerCase()) {
-                            // permission to read/write?
-                            if (perm_obj.permissions[i].collections[j][type]) {
-                                ret = perm_obj[ID];
-                            }
-                        }
-                    }
-                }
+        return permission(request).then(function (perm_obj) {
+            if (perm_obj[type] && perm_obj[ID]) {
+                return perm_obj[ID];
             }
-            return ret;
+            if (perm_obj[type] && type === "read") {
+                return true;
+            }
+            return false;
         }).catch(function () {
             throw new Error('500: Check for authentication failed.');
         }).then(function (allowed) {
             if (allowed) {
                 // return a function for updating active keys object
-                return (function (id_str) {
+                return (function (id_obj) {
                         // scopes the user id/key and returns a function to be
                             // called and passed an object representing changes
                             // made by last put/post command
                     return function (update_obj) { // object to add
                         return connect('users').then(function (db) {
                             let findObj = {}, obj_update_mongo = {}, key;
-                            findObj[ID] = new ObjectID(id_str);
+                            findObj[ID] = id_obj;
 
                             // update_obj should be in the following form:
                                 // {database: <>, collection: <>, entry_id: <>, command: <>, original_document: <>}
@@ -116,6 +118,9 @@
                         });
                     };
                 }(allowed));
+            }
+            if (allowed) {
+                return allowed;
             }
             throw new Error('401: User is not authenticated for that action.');
         });
@@ -187,7 +192,7 @@
         });
     };
 
-    put = function (request) {
+    patch = function (request) {
         // this is to edit an old object
         return checkPerm(request, 'write').then(function (store_changes) {
             // If I am here, I am authenticated, otherwise
@@ -204,12 +209,17 @@
                         edit_body[SET] = request.body;
                     }
 
+                    //verify body is free of mongo special properties
+                    if (!clean_request(request.body)) {
+                        reject(new Error("403: Improperly formed body, '$' operator not allowed."));
+                    }
+
                     //verify doc id
                     if (request.params.database.toLowerCase() === "kinome") {
                         if (request.params.doc_id.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)) {
                             obj_id = request.params.doc_id;
                         } else {
-                            reject("403: Improperly formed id for database entry.");
+                            reject(new Error("403: Improperly formed id for database entry."));
                         }
                     } else {
                         obj_id = new ObjectID(request.params.doc_id);
@@ -285,6 +295,10 @@
             return connect(request.params.database).then(function (db) {
                 // insert the object
                 return new Promise(function (resolve, reject) {
+                    //verify body is free of mongo special properties
+                    if (!clean_request(request.body)) {
+                        reject(new Error("403: Improperly formed body, '$' operator not allowed."));
+                    }
                     if (request.headers["content-type"].toLowerCase() !== "application/json") {
                         reject(new Error("403: Only JSON type is accepted."));
                     } else {
@@ -367,7 +381,7 @@
     lib = {
         list: caller(list),
         get: caller(get),
-        put: caller(put),
+        patch: caller(patch),
         post: caller(post)
     };
 

@@ -93,30 +93,62 @@
     server2.get("/1.0.0/:collection_name", server["1.0.0"].grabDbName);
     server2.get("/1.0.0/:collection_name/:doc_id", server["1.0.0"].grabDocument);
 
-    // API v 2.0.0
-    server2.get("/2.0.0/list/:database/:collection", server["2.0.0"].list);
-    //server2.get("/2.0.0/search/:database/:collection/");
-    server2.get("/2.0.0/get/:database/:collection/:doc_id", server["2.0.0"].get);
-    server2.post("/2.0.0/put/:database/:collection/:doc_id", server["2.0.0"].put);
-    server2.post("/2.0.0/post/:database/:collection", server["2.0.0"].post);
+    /////////////////
+    // API v 2.0.0 //
+    /////////////////
 
+    // databse/collection methods
+    server2.get("/2.0.0/:database/:collection", server["2.0.0"].list);
+    server2.post("/2.0.0/:database/:collection", server["2.0.0"].post);
+
+    // database/collection/document methods
+    server2.get("/2.0.0/:database/:collection/:doc_id", server["2.0.0"].get);
+    server2.patch("/2.0.0/:database/:collection/:doc_id", server["2.0.0"].patch);
+
+    // check permissions (if no auth mechanism is in place, this will return
+    //  default settings in src_auth/acceptedUsers)
+    server2.get('/auth/:database/:collection', function (req, res, next) {
+        users.permission(req).then(function (perms) {
+            res.send(perms);
+        }).catch(function (err) {
+            var code = "500";
+            console.log(err);
+            if (err.message.match(/^(\d{3}):/)) {
+                code = err.message.replace(/^(\d{3}):[\s\S]+/, "$1");
+            }
+
+            //send it back with the code and the object
+            res.send(code * 1, {
+                error: {
+                    code: code,
+                    message: err.message
+                }
+            });
+        });
+        return next();
+    });
+
+    //lists the permissions (temporary)
+    server2.get("/test", function (req, res, next) {
+        users.permission(req).then(function (perms) {
+            if (perms.email) {
+                res.send({logged_in: true, data: [perms], message: "Based on Cookies this user is logged in."});
+            } else {
+                res.send({logged_in: false, resp: perms, message: "Based on Cookies this user is not logged in."});
+            }
+            return next();
+        });
+    });
+
+    /////////////////
+    // v 2.0.0 END //
+    /////////////////
 
     // Login parameters
     if (addUABAuth) {
         server2.get("/login", auth.login);
         server2.post("/login/callback", auth.post_token(users.new_login));
         server2.get("/metadata", auth.metadata);
-        server2.get("/test", function (req, res, next) {
-            users.permission(req).then(function (perms) {
-                console.log(perms, "checked for perms");
-                if (perms.email) {
-                    res.send({logged_in: true, data: [perms], message: "Based on Cookies this user is logged in."});
-                } else {
-                    res.send({logged_in: false, resp: perms, message: "Based on Cookies this user is not logged in."});
-                }
-                return next();
-            });
-        });
     }
 
     // Listen

@@ -247,24 +247,26 @@
     };
 
     check_for_permissions = function (req, key) {
-        //check cookies for key
-        console.log('here is the key...', key);
         let searchTerm, ret, basePerms = {
             permissions: DEFAULT_PERMS,
             email: false
         };
 
+        // standard return
         ret = Promise.resolve(basePerms);
 
+        // If no key is passed in
         if (!key) {
-            if (req.hasOwnProperty("cookies") && req.cookies.hasOwnProperty("api_key")) {
+            if (req.query && req.query.api_key) {
+                key = req.query.api_key;
+            } else if (req.hasOwnProperty("cookies") && req.cookies.hasOwnProperty("api_key")) {
                 key = req.cookies.api_key;
             }
         }
 
+        //get perms based on key
         if (key) {
             searchTerm = {};
-            console.log('here is the key now...', key);
             searchTerm[ID] = new ObjectID(key);
             ret = mcl.then(function (db) {
                 return new Promise(function (resolve) {
@@ -277,6 +279,33 @@
                 });
             });
         }
+
+        // if there are options for a database/collection check those
+        if (req.params && req.params.database && req.params.collection) {
+            ret = ret.then(function (perms) {
+                let i, j, inner = {write: false, read: false};
+                // look for database
+                for (i = 0; i < perms.permissions.length && !inner.read; i += 1) {
+                    //Correct database?
+                    if (perms.permissions[i].database.toLowerCase() === req.params.database.toLowerCase()) {
+                        //Look at collections
+                        for (j = 0; j < perms.permissions[i].collections.length && !inner.read; j += 1) {
+                            //Correct collection?
+                            if (perms.permissions[i].collections[j].name.toLowerCase() === req.params.collection.toLowerCase()) {
+                                // permission to read/write?
+                                inner = perms.permissions[i].collections[j];
+                            }
+                        }
+                    }
+                }
+                inner.email = perms.email;
+                inner.collection = req.params.collection;
+                inner.database = req.params.database;
+                inner[ID] = perms[ID];
+                return inner;
+            });
+        }
+
         return ret;
     };
 

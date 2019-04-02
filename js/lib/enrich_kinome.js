@@ -1099,9 +1099,30 @@
             }
         };
 
-        copy = function (x) {
-            //Just copies
-            return JSON.parse(JSON.stringify(x));
+        copy = function (o) {
+            //recursive function
+            var newO, i, l;
+            // if not array or object or is null return self
+            if (typeof o !== 'object' || o === null) {
+                return o;
+            }
+            // handle case: array
+            if (o instanceof Array) {
+                l = o.length;
+                newO = [];
+                for (i = 0; i < l; i += 1) {
+                    newO[i] = copy(o[i]);
+                }
+                return newO;
+            }
+            // handle case: object
+            newO = {};
+            for (i in o) {
+                if (o.hasOwnProperty(i)) {
+                    newO[i] = copy(o[i]);
+                }
+            }
+            return newO;
         };
 
         clone = function () {

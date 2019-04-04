@@ -121,11 +121,11 @@
                 if ($page_obj.dummyHeatMap !== undefined) {
                     // console.log(DATA);
                     $('<h3>Linear Heat Map</h3>').appendTo($page_obj.linearHeatMap);
-                    createTree(linearHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.linearHeatMap);
+                    createTree(lin_clust.sample, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.linearHeatMap);
                     createHeatMap(linearHeatMapValues, $page_obj.dummyHeatMap, lin_peps, lin_samps, $page_obj.linearHeatMap);
 
                     $('<h3>Kinetic Heat Map</h3>').appendTo($page_obj.kineticHeatMap);
-                    createTree(kineticHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.kineticHeatMap);
+                    createTree(kin_clust.sample, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.kineticHeatMap);
                     createHeatMap(kineticHeatMapValues, $page_obj.dummyHeatMap, kin_peps, kin_samps, $page_obj.kineticHeatMap);
                 }
             }, 100, 'pepPicker');
@@ -494,7 +494,7 @@
             $treeDiv = $('<div>'),
             json;
 
-        cluster = clusterSamples(values).sample;
+        cluster = values;
         // console.log(data);
         json = tree(cluster, data);
 

@@ -90,10 +90,10 @@
                 buildSlider(DATA, my_state_obj, state_object, $page_obj.filterBar, pep_picked);
 
                 // get initial values
-                console.log(state_object.eq.linear);
-                console.log(state_object.eq.kinetic);
-                console.log(state_object.eq.linear.eval);
-                console.log(state_object.eq.kinetic.eval);
+                // console.log(state_object.eq.linear);
+                // console.log(state_object.eq.kinetic);
+                // console.log(state_object.eq.linear.eval);
+                // console.log(state_object.eq.kinetic.eval);
                 linearValues = calculateValues(DATA, state_object.eq.linear.eval, 'linear', state_object, my_state_obj.filter, my_state_obj.filterVal);
                 kineticValues = calculateValues(DATA, state_object.eq.kinetic.eval, 'kinetic', state_object, my_state_obj.filter, my_state_obj.filterVal);
 
@@ -498,7 +498,7 @@
         // console.log(data);
         json = tree(cluster, data);
 
-        console.log('', json, JSON.stringify(json));
+        //console.log('', json, JSON.stringify(json));
 
         var width = widthDiv.width(),
             height = 180;
@@ -571,7 +571,7 @@
 
         colScale = [];
 
-        console.log('the width', widthDiv.width());
+        // console.log('the width', widthDiv.width());
 
         var options = {
             chart: {

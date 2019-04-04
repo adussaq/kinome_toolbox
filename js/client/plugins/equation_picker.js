@@ -117,7 +117,7 @@
                     minimums[type][my_state_obj[type].param][key2] = min;
                     // console.log(all, get_obj, min);
                 }
-                console.log(min);
+                // console.log(min);
                 return min;
             };
 
@@ -198,7 +198,7 @@
                 equation_str: equationOpts[currentEQnum.kinetic][3]
             };
 
-            console.log('here', equation_state.linear);
+            // console.log('here', equation_state.linear);
 
             changeFunc(objectOut);
         };

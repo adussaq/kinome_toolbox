@@ -64,7 +64,10 @@ as urls this works by assuming jQuery is present and that Promises exist
         d3: './js/client/general/d3.min.js',
         'bs_slider-js': './js/client/general/bootstrap-slider.min.js',
         'bs_slider-css': 'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-slider/9.8.0/css/bootstrap-slider.min.css',
-        'peptide_picker-css': './plugins/peptide_picker/peptide_picker.css'
+        'peptide_picker-css': './plugins/peptide_picker/peptide_picker.css',
+
+        // apex charts
+        apex: 'https://cdn.jsdelivr.net/npm/apexcharts'
 
         //data
         // tb_paper1: 'http://138.26.31.155:8000/db/kinome/lvl_2.0.1?find={"name_id":{"$in":["4a39ff16-2322-4037-8912-91a8d0c16921","b9dc1baa-5a54-4785-b4ca-d6e5ecca8982","35df93bf-8a1e-4f12-a76a-1835de02e0bf"]}}',

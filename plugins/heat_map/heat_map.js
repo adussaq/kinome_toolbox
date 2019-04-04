@@ -13,6 +13,8 @@
  *  * d3.js
  */
 
+ var globalCharts = [];
+
 /*global M require KINOME module google jQuery save $ window*/
 (function () {
     'use strict';
@@ -25,7 +27,8 @@
             require('hcluster'),
             require('d3'),
             require('equation-picker'),
-            require('bs_slider-js')
+            require('bs_slider-js'),
+            require('apex')
         ];
 
     var calculateValues, waitForFinalEvent;
@@ -68,6 +71,7 @@
 
         //peptide picker response
         pep_picked = function (state_object) {
+            var lin_clust, kin_clust, lin_peps, kin_peps, lin_samps, kin_samps;
             thisState = state_object;
 
             //wait for event end so page does not redraw more than needed.
@@ -89,8 +93,23 @@
                 linearValues = calculateValues(DATA, state_object.eq.linear.eval, 'linear', state_object, my_state_obj.filter, my_state_obj.filterVal);
                 kineticValues = calculateValues(DATA, state_object.eq.kinetic.eval, 'kinetic', state_object, my_state_obj.filter, my_state_obj.filterVal);
 
-                linearHeatMapValues = normalizeValues(straightenItValue(clusterSamples(linearValues)));
-                kineticHeatMapValues = normalizeValues(straightenItValue(clusterSamples(kineticValues)));
+                lin_clust = clusterSamples(linearValues);
+                kin_clust = clusterSamples(kineticValues);
+                lin_peps = lin_clust.peptide.map(function (ind) {
+                    return linearValues.peptide_list[ind];
+                });
+                kin_peps = kin_clust.peptide.map(function (ind) {
+                    return kineticValues.peptide_list[ind];
+                });
+                lin_samps = straightenItIndex(lin_clust.sample).map(function (ind) {
+                    return DATA[ind].name;
+                });
+                kin_samps = straightenItIndex(kin_clust.sample).map(function (ind) {
+                    return DATA[ind].name;
+                });
+
+                linearHeatMapValues = normalizeValues(straightenItValue(lin_clust.sample));
+                kineticHeatMapValues = normalizeValues(straightenItValue(kin_clust.sample));
 
                 // console.log(linearValues, kineticValues);
                 // console.log('pep picked');
@@ -99,11 +118,11 @@
                     // console.log(DATA);
                     $('<h3>Linear Heat Map</h3>').appendTo($page_obj.linearHeatMap);
                     createTree(linearHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.linearHeatMap);
-                    createHeatMap(linearHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.linearHeatMap);
+                    createHeatMap(linearHeatMapValues, $page_obj.dummyHeatMap, lin_peps, lin_samps, $page_obj.linearHeatMap);
 
                     $('<h3>Kinetic Heat Map</h3>').appendTo($page_obj.kineticHeatMap);
                     createTree(kineticHeatMapValues, DATA, $page_obj.dummyHeatMap).css({'margin-bottom': '10px'}).appendTo($page_obj.kineticHeatMap);
-                    createHeatMap(kineticHeatMapValues, $page_obj.dummyHeatMap).css({'width': '100%'}).appendTo($page_obj.kineticHeatMap);
+                    createHeatMap(kineticHeatMapValues, $page_obj.dummyHeatMap, kin_peps, kin_samps, $page_obj.kineticHeatMap);
                 }
             }, 100, 'pepPicker');
         };
@@ -285,6 +304,13 @@
         }
 
         //console.log('my out vals', outValues);
+
+        Object.defineProperty(outValues, 'peptide_list', {
+            configurable: false,
+            enumerable:false,
+            writable: false,
+            value: peptides
+        });
         return outValues;
     };
 
@@ -406,7 +432,10 @@
         matrixTranspose = matrix_transpose(values);
         peptideCluster = KINOME.hcluster(matrixTranspose, 'euclidean', 'average');
         peptideClusteredMatrix = matrix_transpose(straightenItValue(peptideCluster));
-        return KINOME.hcluster(peptideClusteredMatrix, 'euclidean', 'average');
+        return {
+            sample: KINOME.hcluster(peptideClusteredMatrix, 'euclidean', 'average'),
+            peptide: straightenItIndex(peptideCluster),
+        };
     };
 
     /**
@@ -455,7 +484,7 @@
             $treeDiv = $('<div>'),
             json;
 
-        cluster = clusterSamples(values);
+        cluster = clusterSamples(values).sample;
         // console.log(data);
         json = tree(cluster, data);
 
@@ -510,28 +539,119 @@
         return $treeDiv;
     };
 
-    var createHeatMap = function(values, widthDiv) {
-        var i, j, canvas = document.createElement('canvas'),
-            ctx,
-            numRows = values[0].length,
-            numCols = values.length,
-            rowScale = numRows < 80 
-                ? 4 * 80 / numRows
-                : 4,
-            colScale;
+    var createHeatMap = function(values, widthDiv, labelsx, labelsy, elem) {
+        //console.log(values, widthDiv);
+        var i, j, canvas = document.createElement('apexchart'),
+                ctx,
+                numRows = values[0].length,
+                numCols = values.length,
+                rowScale = numRows < 80
+                    ? 4 * 80 / numRows
+                    : 4,
+                colScale,
+                valt = matrix_transpose(values);
+                //random = "figure" + Math.random().toString();
 
-        canvas.width = widthDiv.width();
-        canvas.height = numRows * rowScale;
-        colScale = canvas.width / numCols;
+        //canvas.width = widthDiv.width();
+        //canvas.height = numRows * rowScale;
 
-        ctx = canvas.getContext('2d');
+        //colScale = canvas.width / numCols;
 
-        for (i = 0; i < values.length; i += 1) {
-            for (j = 0; j < values[i].length; j += 1) {
-                ctx.fillStyle = KINOME.gradient.convert(values[i][j]);
-                ctx.fillRect(i * colScale, j * rowScale, colScale, rowScale);
+        colScale = [];
+
+        console.log('the width', widthDiv.width());
+
+        var options = {
+            chart: {
+                height: numRows * rowScale * 2,
+                width: widthDiv.width(),
+                type: 'heatmap'
+            },
+            legend: {
+                show: false
+            },
+            plotOptions: {
+                heatmap: {
+                    shadeIntensity: 1,
+                    colorScale: {}
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            title: {
+                text: ''
+            },
+            yaxis: {
+                labels: {show: false}
+            },
+            xaxis: {
+                labels: {show: false}
+            },
+            series: [],
+            tooltip: {
+                x: {show: true},
+                y: {title: {formatter:function (x) {return x}}}
+            }
+        };
+
+        for (i = 0; i < valt.length; i += 1) {
+            options.series[i] = {
+                name: labelsx[i],
+                data: []
+            };
+            for (j = 0; j < valt[i].length; j += 1) {
+                options.series[i].data.push({
+                    x: labelsy[j],
+                    y: valt[i][j]
+                });
+                colScale.push(valt[i][j]);
             }
         }
+
+        colScale = colScale.sort(function (a, b) {
+            return a - b;
+        });
+
+        options.plotOptions.heatmap.colorScale.ranges = [{
+            from: colScale[0],
+            to: colScale[Math.floor(colScale.length / 4)],
+            name: 'low',
+            color: '#00A100'
+        }, {
+            from: colScale[Math.ceil(colScale.length / 4)],
+            to: colScale[Math.floor(2 * colScale.length / 4)],
+            name: 'medium',
+            color: '#128FD9'
+        }, {
+            from: colScale[Math.ceil(2 * colScale.length / 4)],
+            to: colScale[Math.floor(3 * colScale.length / 4)],
+            name: 'high',
+            color: '#FFB200'
+        }, {
+            from: colScale[Math.ceil(3 * colScale.length / 4)],
+            to: colScale[colScale.length - 1],
+            name: 'extreme',
+            color: '#FF0000'
+        }];
+
+        //console.log(JSON.stringify(options));
+
+        elem.append(canvas);
+
+        var chart = new ApexCharts(canvas, options);
+
+        //   globalCharts.push(chart);
+        chart.render();
+
+        //ctx = canvas.getContext('2d');
+
+        // for (i = 0; i < values.length; i += 1) {
+        //     for (j = 0; j < values[i].length; j += 1) {
+        //         ctx.fillStyle = KINOME.gradient.convert(values[i][j]);
+        //         ctx.fillRect(i * colScale, j * rowScale, colScale, rowScale);
+        //     }
+        // }
 
         return $(canvas);
     };

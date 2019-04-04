@@ -90,6 +90,10 @@
                 buildSlider(DATA, my_state_obj, state_object, $page_obj.filterBar, pep_picked);
 
                 // get initial values
+                console.log(state_object.eq.linear);
+                console.log(state_object.eq.kinetic);
+                console.log(state_object.eq.linear.eval);
+                console.log(state_object.eq.kinetic.eval);
                 linearValues = calculateValues(DATA, state_object.eq.linear.eval, 'linear', state_object, my_state_obj.filter, my_state_obj.filterVal);
                 kineticValues = calculateValues(DATA, state_object.eq.kinetic.eval, 'kinetic', state_object, my_state_obj.filter, my_state_obj.filterVal);
 
@@ -221,10 +225,12 @@
      */
     calculateValues = function(data, equation, type, state, filter, filterVal, retFilterArr) {
         var i, j, k, values = [], thisVal, anovas = [], outValues = [], thisF, pepCount = -1, sampCount = 0,
-            peptides = data.list('peptides'), filterArr = [],
+            peptides = data.list('peptides'), filterArr = [], pepOut,
             getObject = {
                 type: type
             };
+
+        pepOut = peptides;
 
         if (type === 'linear') {
             getObject.cycle = state.cycle;
@@ -250,6 +256,7 @@
         }
 
         if (filter === 'anova') {
+            pepOut = [];
             outValues = [];
             for (k = 0; k < values[0][0].length; k += 1) { // by peptide
                 anovas = [];
@@ -276,9 +283,11 @@
                             sampCount += 1;
                         }
                     }
+                    pepOut.push(peptides[k]);
                 }
             }
         } else if (filter === 'variance') {
+            pepOut = [];
             for (j = 0; j < values[0].length; j += 1) { // By peptide
                 anovas = [];
                 for (i = 0; i < values.length; i += 1) { // By sample
@@ -292,6 +301,7 @@
                     for (i = 0; i < values.length; i += 1) { // By sample
                         outValues[i][pepCount] = values[i][j];
                     }
+                    pepOut.push(peptides[j]);
                 }
             }
         } else {
@@ -309,7 +319,7 @@
             configurable: false,
             enumerable:false,
             writable: false,
-            value: peptides
+            value: pepOut
         });
         return outValues;
     };
@@ -434,7 +444,7 @@
         peptideClusteredMatrix = matrix_transpose(straightenItValue(peptideCluster));
         return {
             sample: KINOME.hcluster(peptideClusteredMatrix, 'euclidean', 'average'),
-            peptide: straightenItIndex(peptideCluster),
+            peptide: straightenItIndex(peptideCluster)
         };
     };
 
@@ -447,22 +457,22 @@
         var i, j, max = -Infinity,
             min = Infinity;
 
-        for (i = 0; i < values.length; i += 1) {
-            // find max
-            for (j = 0; j < values[i].length; j += 1) {
-                if (!Number.isNaN(values[i][j])) {
-                    max = Math.max(values[i][j], max);
-                    min = Math.min(values[i][j], min);
-                }
-            }
-        }
+        // for (i = 0; i < values.length; i += 1) {
+        //     // find max
+        //     for (j = 0; j < values[i].length; j += 1) {
+        //         if (!Number.isNaN(values[i][j])) {
+        //             max = Math.max(values[i][j], max);
+        //             min = Math.min(values[i][j], min);
+        //         }
+        //     }
+        // }
 
-        // divide all values by max to normalize
-        for (i = 0; i < values.length; i += 1) {
-            for (j = 0; j < values[i].length; j += 1) {
-                values[i][j] = (values[i][j] - min) / (max - min);
-            }
-        }
+        // // divide all values by max to normalize
+        // for (i = 0; i < values.length; i += 1) {
+        //     for (j = 0; j < values[i].length; j += 1) {
+        //         values[i][j] = (values[i][j] - min) / (max - min);
+        //     }
+        // }
 
         return values;
     };
@@ -487,6 +497,8 @@
         cluster = clusterSamples(values).sample;
         // console.log(data);
         json = tree(cluster, data);
+
+        console.log('', json, JSON.stringify(json));
 
         var width = widthDiv.width(),
             height = 180;

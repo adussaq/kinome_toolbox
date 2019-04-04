@@ -198,6 +198,8 @@
                 equation_str: equationOpts[currentEQnum.kinetic][3]
             };
 
+            console.log('here', equation_state.linear);
+
             changeFunc(objectOut);
         };
 

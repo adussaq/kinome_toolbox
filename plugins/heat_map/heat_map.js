@@ -99,6 +99,9 @@
 
                 lin_clust = clusterSamples(linearValues);
                 kin_clust = clusterSamples(kineticValues);
+
+                console.log(lin_clust, kin_clust, JSON.stringify(kin_clust));
+
                 lin_peps = lin_clust.peptide.map(function (ind) {
                     return linearValues.peptide_list[ind];
                 });
@@ -579,6 +582,15 @@
                 width: widthDiv.width(),
                 type: 'heatmap'
             },
+            animations: {
+                enabled: false,
+                animateGradually: {
+                    enabled: false
+                },
+                dynamicAnimation: {
+                    enabled: false
+                }
+            },
             legend: {
                 show: false
             },
@@ -603,7 +615,7 @@
             series: [],
             tooltip: {
                 x: {show: true},
-                y: {title: {formatter:function (x) {return x}}}
+                y: {title: {formatter: function (x) { return x; }}}
             }
         };
 

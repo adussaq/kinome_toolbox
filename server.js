@@ -1,225 +1,159 @@
 (function () {
     'use strict';
 
-    var MongoClient = require('mongodb').MongoClient, restify = require('restify'), assert = require('assert');//, ObjectId = require('mongodb').ObjectID;
+    /**************************************************************************/
+    // Set this to false for installations, specifically created to allow
+        // access to UAB SAML authentication mechanism for privileged data
+        // access and editing.
+    var addUABAuth = false;
+    /**************************************************************************/
+
+    /*The following is for the external db*/
+
+    var restify = require('restify'),
+        serverObj = {
+            '1.0.0': require("./src_api/server_library.js"),
+            '2.0.0': require("./src_api/api_v2.0.0.js")
+        },
+        auth,
+        users,
+        cookieParser;
+
+    if (addUABAuth) {
+        auth = require("./src_auth/saml_auth2.js");
+        users = require("./src_auth/acceptedUsers.js");
+        cookieParser = require('restify-cookies');
+    } else {
+        // This will just return a basic use object for use with the v2 API
+        users = {};
+        users.permission = require("./src_auth/acceptedUsers.js").permission;
+    }
+
+    //, ObjectId = require('mongodb').ObjectID;
 
     //Needs to impliment aggregate stuff (https://docs.mongodb.com/manual/reference/operator/aggregation/)
     //Need to impliment mapreduce stuff
     //Need to impliment projection stuff
-
-    /*the following is for the internal db (accesible as a registered UAB user only)*/
-
 
     //Good source for operators:
     // https://docs.mongodb.com/manual/reference/operator/
     //I am making sure to not allow any operators that can change the documents
     // this is to ensure that this remains a query only server
 
-    var acceptedRegex = "", sanatize, j, grabDbName, grabDocument,
-            accepted$ = [
-        "all", "and", "bitsAllClear", "bitsAllSet", "bitsAnyClear",
-        "bitsAnySet", "collStats", "comment", "elemMatch",
-        "eq", "exists", "explain", "geoIntersects", "geoWithin", "gt",
-        "gte", "hint", "in", "limit", "lte", "match", "max", "maxScan",
-        "maxTimeMS", "meta", "min", "mod", "natural", "ne", "near",
-        "nearShpere", "nin", "nor", "not", "or", "orderby", "query",
-        "regex", "returnKey", "showDiskLoc", "size", "skip", "slice",
-        "snapshot", "text", "type", "where"
-    ];
-
-
-    for (j = 0; j < accepted$.length; j += 1) {
-        acceptedRegex += "^\\$" + accepted$[j] + "$|";
-    }
-    acceptedRegex = acceptedRegex.replace(/\|$/, "");
-    acceptedRegex = new RegExp(acceptedRegex, 'i');
-
-    //define the query sanatize function
-    //sanatize the query
-    sanatize = function (query) {
-        var keys, i;
-        if (typeof query === "object") {
-            keys = Object.keys(query);
-            for (i = 0; i < keys.length; i += 1) {
-                if (keys[i].match(/^\s*\$/)) {
-                    //straight up kill it if it is not an accepted type
-                    if (!keys[i].match(acceptedRegex)) {
-                        delete query[keys[i]];
-                    }
-                } else if (typeof query[keys[i]] === "object") {
-                    query[keys[i]] = sanatize(query[keys[i]]);
-                }
-            }
-        } else {
-            //If it is not an object then just query it all
-            // should probably generate an error message
-            query = {};
-        }
-        return query;
-    };
-
-    grabDbName = function (request, response) {
-        var myDbName = request.params.db_name, query, fields, sort,
-                collectionName = request.params.collection_name, url;
-
-        //Deal with the objects
-        // myDbName = myDbName || 'kinome';
-        url = 'mongodb://localhost:27017/' + myDbName;
-        console.log('db name:', myDbName);
-        request.query.find = request.query.find || "{}";
-        request.query.fields = request.query.fields || "-1";
-        request.query.sort = request.query.sort || "[]";
-
-        request.query.find = decodeURIComponent(request.query.find);
-        request.query.fields = decodeURIComponent(request.query.fields);
-        request.query.sort = decodeURIComponent(request.query.sort);
-
-        //Objectify them
-        query = JSON.parse(request.query.find);
-        query = sanatize(query);
-        fields = JSON.parse(request.query.fields);
-        sort = JSON.parse(request.query.sort);
-
-        //if there is a sort option, sanatize it
-        if (sort.length > 0) {
-            sanatize(sort);
-        }
-
-        //Start up connection and run the query
-        MongoClient.connect(url, function (err, db) {
-            assert.equal(null, err);
-            var spec;
-            var collection = db.collection(collectionName);
-            console.log("Connected successfully to server");
-
-            //options
-            var limit = request.query.limit * 1 || 9000000; //9 mil more than enough
-            var skip = request.query.skip * 1 || 0;
-            var maxTimeMS = request.query.maxTimeMS * 1 || 1000 * 60 * 60; //1 hr
-
-            //special stuff
-            console.log(query, fields, sort);
-            if (fields === -1) {
-                spec = collection.find(query, {
-                    limit: limit,
-                    skip: skip,
-                    maxTimeMS: maxTimeMS
-                });
-            } else {
-                spec = collection.find(query, sanatize(fields), {
-                    limit: limit,
-                    skip: skip,
-                    maxTimeMS: maxTimeMS
-                });
-            }
-
-            //run the sort operation and then return the final result
-            spec.sort(sort).toArray(function (err, docs) {
-                assert.equal(err, null);
-                console.log('Found docs');
-               // console.log("Found the following records", docs);
-                response.send(docs);
-            });
-        });
-    };
-
-    grabDocument = function (request, response) {
-        var myDbName = request.params.db_name, fields,
-                collectionName = request.params.collection_name,
-                query = {id: decodeURIComponent(request.params.doc_id)}, url;
-
-        //Deal with the objects
-        // myDbName = myDbName || 'kinome';
-        url = 'mongodb://localhost:27017/' + myDbName;
-        request.query.fields = request.query.fields || "-1";
-        request.query.fields = decodeURIComponent(request.query.fields);
-
-        //Objectify them
-        query = sanatize(query);
-        fields = JSON.parse(request.query.fields);
-
-        //Start up connection and run the query
-        MongoClient.connect(url, function (err, db) {
-            assert.equal(null, err);
-            var spec;
-            var collection = db.collection(collectionName);
-            console.log("Connected successfully to server");
-
-            //options
-            var maxTimeMS = request.query.maxTimeMS * 1 || 1000 * 60 * 60; //1 hr
-
-            //special stuff
-            console.log(query, myDbName, collectionName);
-            if (fields === -1) {
-                spec = collection.find({"_id": query.id}, {
-                    maxTimeMS: maxTimeMS
-                });
-            } else {
-                spec = collection.find({"_id": query.id}, sanatize(fields), {
-                    maxTimeMS: maxTimeMS
-                });
-            }
-
-            //run the sort operation and then return the final result
-            spec.toArray(function (err, docs) {
-                assert.equal(err, null);
-                console.log('Found docs');
-                //console.log("Found the following records", docs);
-                //Only return the first object
-                if (docs[0]) {
-                    response.send(docs[0]);
-                } else {
-                    response.send(undefined);
-                }
-            });
-        });
-    };
-
     //sets up the server stuff
-    var server1 = restify.createServer({
-        accept: ['application/json', 'image/tif', 'image/png', 'text/plain']
-    });
-    server1.use(restify.queryParser());
-    server1.use(restify.CORS({}));
+    // var server1 = restify.createServer({
+    //     accept: ['application/json', 'image/tif', 'image/png']
+    // });
+    // server1.use(restify.queryParser());
+    // server1.use(restify.CORS({}));
 
-    server1.get(/\/img\/kinome\/?.*/, restify.serveStatic({
+    // server1.get(/\/img\/kinome\/?.*/, restify.serveStatic({
+    //     directory: "/var/www"
+    // }));
+
+    // //http://138.26.31.155:8000/img/kinome/631308613_W1_F1_T200_P154_I1313_A30.tif
+
+    // /*the following is for the internal db (accesible as a registered UAB user only)*/
+    // server1.get("/db/:db_name/:collection_name", grabDbName);
+    // server1.get("/db/:db_name/:collection_name/:doc_id", grabDocument);
+    // server1.listen(8000, function () {
+    //     console.log('%s listening at %s', server1.name, server1.url);
+    // });
+
+
+    /*
+
+        This file is for the general external server. Use this to make your own
+        server.
+
+    */
+
+    var server = restify.createServer({
+        accept: ['application/json']
+    });
+    server.use(restify.queryParser());
+    server.use(restify.bodyParser());
+    server.use(restify.CORS({credentials: true}));
+
+    if (addUABAuth) {
+        server.use(cookieParser.parse);
+    }
+
+    //static serving of flat files
+    server.get(/\/img\/kinome\/?.*/, restify.serveStatic({
         directory: "/var/www"
     }));
-    server1.get(/\/file\/?.*/, restify.serveStatic({
+    server.get(/\/file\/?.*/, restify.serveStatic({
         directory: "/var/www/global_files"
     }));
 
-    server1.get(/\/uabfile\/?.*/, restify.serveStatic({
-        directory: "/var/www/internal_files"
-    }));
 
-    //http://138.26.31.155:8000/img/kinome/631308613_W1_F1_T200_P154_I1313_A30.tif
 
-    /*the following is for the internal db (accesible as a registered UAB user only)*/
-    server1.get("/db/:db_name/:collection_name", grabDbName);
-    server1.get("/db/:db_name/:collection_name/:doc_id", grabDocument);
-    server1.listen(8000, function () {
-        console.log('%s listening at %s', server1.name, server1.url);
+    /*The following is for the internal db*/
+    server.get("/1.0.0/:collection_name", serverObj["1.0.0"].grabDbName);
+    server.get("/1.0.0/:collection_name/:doc_id", serverObj["1.0.0"].grabDocument);
+
+    /////////////////
+    // API v 2.0.0 //
+    /////////////////
+
+    // databse/collection methods
+    server.get("/2.0.0/:database/:collection", serverObj["2.0.0"].list);
+    server.post("/2.0.0/:database/:collection", serverObj["2.0.0"].post);
+
+    // database/collection/document methods
+    server.get("/2.0.0/:database/:collection/:doc_id", serverObj["2.0.0"].get);
+    server.patch("/2.0.0/:database/:collection/:doc_id", serverObj["2.0.0"].patch);
+
+    // check permissions (if no auth mechanism is in place, this will return
+    //  default settings in src_auth/acceptedUsers)
+    server.get('/auth/:database/:collection', function (req, res, next) {
+        users.permission(req).then(function (perms) {
+            res.send(perms);
+        }).catch(function (err) {
+            var code = "500";
+            console.log(err);
+            if (err.message.match(/^(\d{3}):/)) {
+                code = err.message.replace(/^(\d{3}):[\s\S]+/, "$1");
+            }
+
+            //send it back with the code and the object
+            res.send(code * 1, {
+                error: {
+                    code: code,
+                    message: err.message
+                }
+            });
+        });
+        return next();
     });
 
+    //lists the permissions (temporary)
+    server.get("/test", function (req, res, next) {
+        users.permission(req).then(function (perms) {
+            if (perms.email) {
+                res.send({logged_in: true, data: [perms], message: "Based on Cookies this user is logged in."});
+            } else {
+                res.send({logged_in: false, resp: perms, message: "Based on Cookies this user is not logged in."});
+            }
+            return next();
+        });
+    });
 
-    // var server2 = restify.createServer({
-    //     accept: ['application/json', 'image/tif', 'image/png']
-    // });
-    // server2.use(restify.queryParser());
-    // server2.use(restify.CORS({}));
+    /////////////////
+    // v 2.0.0 END //
+    /////////////////
 
-    // server2.get(/\/img\/kinome\/?.*/, restify.serveStatic({
-    //     directory: "./server_imgs"
-    // }));
+    // Login parameters
+    if (addUABAuth) {
+        server.get("/login", auth.login);
+        server.post("/login/callback", auth.post_token(users.new_login));
+        server.get("/metadata", auth.metadata);
+    }
 
-
-
-    // /*The following is for the external db*/
-    // server2.get("/1.0.0/:collection_name", grabDbName);
-    // server2.get("/1.0.0/:collection_name/:doc_id", grabDocument);
-    // server2.listen(8080, function () {
-    //     console.log('%s listening at %s', server2.name, server2.url);
-    // });
+    // Listen
+    server.listen(8000, function () {
+        console.log('%s listening at %s', server.name, server.url);
+    });
 
 }());

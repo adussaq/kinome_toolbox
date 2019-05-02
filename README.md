@@ -94,7 +94,7 @@ In summary the steps are:
 4) Git clone this repository (Above)
 5) Navigate to the directory you just created where server.js sits.
 6) ```npm install``` to install all the required packages
-7) forever start server.js
+7) ```forever start server.js```
 
 From there you can see the [below](#Server-Side-File-Parsing) on how to add files to your own database. The toolbox will be running at localhost:8000. You can utilize your server settings to port this to outside traffic. Of note server2.js is set up to utilize an auth component and would take significant work to impliment that is not included nor documented here.
 
